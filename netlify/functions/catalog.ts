@@ -20,6 +20,9 @@ export default async function handler(request: Request): Promise<Response> {
   if (request.method !== "GET") return methodNotAllowed();
 
   try {
+    // Expired reservations must not keep a verified copy out of the catalogue
+    // forever. This routine only releases rows whose expires_at has passed.
+    await query("SELECT public.release_expired_reservations()").catch(() => undefined);
     const rows = await query<CatalogRow>(
       `SELECT copy_id, bibliographic_record_id, title, author, isbn, edition,
               publication_year, publisher, genre, inventory_code, physical_condition, location
