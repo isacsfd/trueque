@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#12335f" />
+  <title>Administración | Trueque IUB</title>
+  <style>
+    :root { --navy:#12335f; --gold:#c9a34a; --cream:#f7f4ec; --line:#d9d4c7; --ink:#172033; --muted:#5d6678; --ok:#1f6b4f; --danger:#9c1c1c; }
+    * { box-sizing:border-box; } body { margin:0; background:var(--cream); color:var(--ink); font-family:"Segoe UI",system-ui,sans-serif; line-height:1.45; }
+    header { background:var(--navy); color:#fff; padding:16px 24px; } .wrap { max-width:1180px; margin:0 auto; }
+    header .wrap { display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; }
+    header a { color:#f1d58c; text-decoration:none; font-weight:700; } h1,h2,h3 { font-family:Georgia,serif; color:var(--navy); margin:0; }
+    h1 { color:#fff; font-size:1.55rem; } h2 { font-size:1.7rem; margin-bottom:14px; } h3 { font-size:1.1rem; }
+    main { max-width:1180px; margin:0 auto; padding:24px; } .card { background:#fff; border:1px solid var(--line); border-radius:14px; padding:22px; margin:16px 0; box-shadow:0 8px 24px rgba(18,51,95,.06); }
+    .login { max-width:430px; margin:60px auto; } label { display:block; font-size:.78rem; font-weight:800; letter-spacing:.04em; text-transform:uppercase; color:#34405a; margin-top:12px; }
+    input,select { width:100%; padding:10px 12px; border:1px solid #b9c3d2; border-radius:8px; font:inherit; background:#fff; margin-top:5px; }
+    input:focus,select:focus { outline:3px solid rgba(31,93,168,.18); border-color:#1f5da8; }
+    button { border:0; border-radius:8px; padding:10px 14px; font:inherit; font-weight:800; cursor:pointer; background:var(--navy); color:#fff; }
+    button.secondary { background:#fff; color:var(--navy); border:1px solid #b9c8dc; } button.danger { background:#fff0f0; color:var(--danger); border:1px solid #e4b4b4; }
+    button:disabled { opacity:.55; cursor:wait; } .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+    .tabs { display:flex; gap:8px; flex-wrap:wrap; margin:8px 0 0; } .tabs button { background:#fff; color:var(--navy); border:1px solid #b9c8dc; }
+    .tabs button.active { background:var(--navy); color:#fff; border-color:var(--navy); }
+    .notice { padding:12px 14px; border-radius:8px; margin:12px 0; background:#eef3f9; color:#27415f; } .error { background:#fff0f0; color:#7d1a1a; border-left:4px solid #b33; }
+    .success { background:#edf7f1; color:#15523a; border-left:4px solid #2c8a5d; } .muted { color:var(--muted); font-size:.88rem; }
+    table { width:100%; border-collapse:collapse; font-size:.86rem; } th,td { padding:9px 8px; border-bottom:1px solid #ece8df; text-align:left; vertical-align:top; } th { background:#eaf0f8; color:var(--navy); font-size:.73rem; text-transform:uppercase; letter-spacing:.04em; }
+    .chip { display:inline-block; background:#eaf0f8; color:var(--navy); border-radius:999px; padding:3px 8px; font-size:.72rem; font-weight:800; margin:2px; }
+    .pending { background:#fff2cc; color:#6b4f00; } .inactive { color:#777; } .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+    .inline { display:flex; gap:6px; flex-wrap:wrap; align-items:center; } .inline select { width:auto; min-width:150px; margin:0; }
+    dialog { border:0; border-radius:14px; padding:0; width:min(520px,92vw); box-shadow:0 20px 60px rgba(0,0,0,.3); } dialog .body { padding:22px; } dialog::backdrop { background:rgba(9,22,41,.55); }
+    .password-box { font-family:ui-monospace,monospace; background:#f3f6fa; border:1px dashed #9aa8bb; padding:12px; border-radius:8px; word-break:break-all; margin:10px 0; }
+    @media(max-width:760px){ .grid2{grid-template-columns:1fr} table{font-size:.78rem} .table-wrap{overflow:auto} }
+  </style>
+</head>
+<body>
+  <header><div class="wrap"><a href="/">← Volver al sitio</a><h1>Administración Trueque IUB</h1><a href="/catalogo">Catálogo real</a></div></header>
+  <main>
+    <section id="loginView" class="card login" hidden>
+      <h2>Acceso administrativo</h2>
+      <p class="muted">Acceso exclusivo para personal autorizado.</p>
+      <div id="loginError" class="notice error" hidden></div>
+      <form id="loginForm">
+        <label for="loginUser">Usuario</label><input id="loginUser" name="username" autocomplete="username" required maxlength="200" />
+        <label for="loginPass">Contraseña</label><input id="loginPass" name="password" type="password" autocomplete="current-password" required minlength="8" maxlength="500" />
+        <div class="row" style="margin-top:16px"><button type="submit">Iniciar sesión</button></div>
+      </form>
+    </section>
+
+    <section id="appView" hidden>
+      <div class="card">
+        <div class="row" style="justify-content:space-between"><div><p class="muted" style="margin:0">Sesión administrativa</p><h2 id="whoami" style="margin:0">—</h2></div><button id="logout" class="secondary" type="button">Cerrar sesión</button></div>
+        <div class="tabs" role="tablist" aria-label="Secciones administrativas">
+          <button type="button" data-tab="summary" class="active">Resumen</button>
+          <button type="button" data-tab="users">Usuarios y permisos</button>
+          <button type="button" data-tab="audit">Auditoría</button>
+          <button type="button" data-tab="account">Mi cuenta y seguridad</button>
+        </div>
+      </div>
+
+      <section id="tab-summary" class="tab-panel">
+        <div class="card"><h2>Resumen</h2><p>Gestiona las solicitudes y los intercambios del Trueque Literario IUB.</p><p class="muted">Las operaciones sensibles se validan en el servidor. Los mensajes de error no exponen detalles internos.</p><div class="row"><a href="/" class="button" style="text-decoration:none;padding:10px 14px;border-radius:8px;background:#12335f;color:#fff;font-weight:800">Ir a solicitudes</a><a href="/catalogo" style="text-decoration:none;padding:10px 14px;border-radius:8px;border:1px solid #b9c8dc;color:#12335f;font-weight:800">Ver catálogo real</a></div></div>
+      </section>
+
+      <section id="tab-users" class="tab-panel" hidden>
+        <div class="card"><div class="row" style="justify-content:space-between"><div><h2>Usuarios y permisos</h2><p class="muted">Solo SUPER ADMIN puede gestionar cuentas y roles.</p></div><button id="refreshUsers" class="secondary" type="button">Actualizar</button></div>
+          <div id="usersError" class="notice error" hidden></div>
+          <div id="usersTable" class="table-wrap"></div>
+        </div>
+        <div class="card" id="createCard"><h3>Crear cuenta administrativa</h3><p class="muted">La contraseña temporal se muestra una sola vez y debe cambiarse al ingresar.</p>
+          <div id="createError" class="notice error" hidden></div>
+          <form id="createForm" class="grid2"><div><label for="newEmail">Correo</label><input id="newEmail" type="email" required maxlength="320" /></div><div><label for="newLogin">Usuario de acceso</label><input id="newLogin" required minlength="3" maxlength="200" placeholder="Se usa el correo si se deja vacío" /></div><div><label for="newRole">Perfil</label><select id="newRole" required></select></div><div style="align-self:end"><button type="submit">Crear cuenta</button></div></form>
+        </div>
+      </section>
+
+      <section id="tab-audit" class="tab-panel" hidden>
+        <div class="card"><div class="row" style="justify-content:space-between"><h2>Auditoría</h2><button id="refreshAudit" class="secondary" type="button">Actualizar</button></div><div id="auditError" class="notice error" hidden></div><div id="auditTable" class="table-wrap"></div></div>
+      </section>
+
+      <section id="tab-account" class="tab-panel" hidden>
+        <div class="card" style="max-width:620px"><h2>Mi cuenta y seguridad</h2><p class="muted">El cambio invalida las sesiones anteriores y requiere iniciar sesión de nuevo.</p>
+          <div id="passwordError" class="notice error" hidden></div><div id="passwordSuccess" class="notice success" hidden></div>
+          <form id="passwordForm">
+            <label for="currentPassword">Contraseña actual</label><input id="currentPassword" type="password" autocomplete="current-password" required minlength="1" maxlength="500" />
+            <label for="newPassword">Nueva contraseña</label><input id="newPassword" type="password" autocomplete="new-password" required minlength="12" maxlength="200" />
+            <label for="confirmPassword">Confirmar nueva contraseña</label><input id="confirmPassword" type="password" autocomplete="new-password" required minlength="12" maxlength="200" />
+            <div class="row" style="margin-top:8px"><button type="button" class="secondary" id="togglePassword">Mostrar contraseñas</button></div>
+            <p class="muted">Mínimo 12 caracteres, mayúscula, minúscula, número y símbolo.</p>
+            <div class="row"><button type="submit">Cambiar contraseña</button></div>
+          </form>
+        </div>
+      </section>
+    </section>
+  </main>
+
+  <dialog id="tempDialog"><div class="body"><h3>Contraseña temporal</h3><p class="muted">Se muestra una sola vez. Entrégala por un canal seguro y exige cambiarla al primer ingreso.</p><div id="tempValue" class="password-box"></div><div class="row"><button type="button" id="copyTemp">Copiar</button><button type="button" class="secondary" id="closeTemp">Cerrar</button></div></div></dialog>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    let sessionUser = "";
+    let canManage = true;
+    let users = [];
+    let roles = [];
+
+    async function api(path, options = {}) {
+      const method = options.method || "GET";
+      const headers = { Accept: "application/json", ...(options.headers || {}) };
+      if (options.body) headers["Content-Type"] = "application/json";
+      if (method !== "GET") headers["X-IUB-Admin"] = "1";
+      const response = await fetch(path, { credentials: "same-origin", ...options, method, headers });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        const err = new Error(body?.error?.message || "No se pudo completar la operación.");
+        err.status = response.status;
+        throw err;
+      }
+      return body;
+    }
+
+    function showError(id, message) { const el=$(id); el.textContent=message; el.hidden=!message; }
+    function clearErrors() { ["loginError","usersError","createError","auditError","passwordError"].forEach(id=>showError(id,"")); }
+    function esc(value) { return String(value ?? "").replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+    function fmt(value) { return value ? new Date(value).toLocaleString("es-CO") : "—"; }
+
+    async function boot() {
+      try {
+        const current = await api("/api/admin/session");
+        await enterApp(current.username);
+      } catch {
+        $("loginView").hidden = false;
+        $("appView").hidden = true;
+      }
+    }
+
+    async function enterApp(username) {
+      sessionUser = username;
+      $("loginView").hidden = true;
+      $("appView").hidden = false;
+      $("whoami").textContent = username;
+      try { await loadUsers(); } catch (e) { canManage = false; $("usersError").textContent = e.status === 403 ? "Tu cuenta no tiene permiso para gestionar usuarios." : e.message; $("usersError").hidden = false; $("createCard").hidden = true; }
+      try { await loadAudit(); } catch (e) { $("auditError").textContent = e.status === 403 ? "Tu cuenta no tiene permiso para consultar auditoría." : e.message; $("auditError").hidden = false; }
+      showTab("summary");
+    }
+
+    function showTab(name) {
+      document.querySelectorAll(".tab-panel").forEach(p => p.hidden = p.id !== `tab-${name}`);
+      document.querySelectorAll(".tabs button").forEach(b => b.classList.toggle("active", b.dataset.tab === name));
+    }
+
+    async function loadUsers() {
+      showError("usersError","");
+      const data = await api("/api/admin/users");
+      users = data.users || []; roles = data.roles || [];
+      $("refreshUsers").disabled = false;
+      const roleOptions = roles.map(r => `<option value="${esc(r.role_key)}">${esc(r.display_name)}</option>`).join("");
+      $("newRole").innerHTML = roleOptions;
+      $("usersTable").innerHTML = `<table><thead><tr><th>Cuenta</th><th>Correo</th><th>Perfil</th><th>Estado</th><th>Creada</th><th>Último acceso</th><th>Acciones</th></tr></thead><tbody>${users.map(u => {
+        const assigned = (u.roles || []).map(r => r.roleKey);
+        const available = roles.filter(r => !assigned.includes(r.role_key));
+        return `<tr><td><strong>${esc(u.login_name)}</strong>${u.must_change_password ? '<br><span class="chip pending">Cambio pendiente</span>' : ''}</td><td>${esc(u.email || '—')}</td><td>${(u.roles || []).map(r => `<span class="chip">${esc(r.displayName)}${r.roleKey === 'super_admin' ? '' : ` <button class="secondary" style="padding:1px 5px;font-size:.65rem" data-remove="${esc(u.user_id)}|${esc(r.roleKey)}">×</button>`}</span>`).join('') || '—'}</td><td>${u.is_active ? 'Activa' : '<span class="inactive">Inactiva</span>'}</td><td>${fmt(u.created_at)}</td><td>${fmt(u.last_login_at)}</td><td><div class="inline">${available.length ? `<select data-role-select="${esc(u.user_id)}"><option value="">Asignar perfil</option>${available.map(r=>`<option value="${esc(r.role_key)}">${esc(r.display_name)}</option>`).join('')}</select><button class="secondary" data-assign="${esc(u.user_id)}">Asignar</button>` : ''}<button class="secondary" data-toggle="${esc(u.user_id)}|${u.is_active ? '0':'1'}">${u.is_active ? 'Desactivar' : 'Activar'}</button><button class="secondary" data-reset="${esc(u.user_id)}">Restablecer</button></div></td></tr>`;
+      }).join('')}</tbody></table>`;
+      $("usersTable").querySelectorAll('[data-assign]').forEach(b => b.onclick = () => assignRole(b.dataset.assign));
+      $("usersTable").querySelectorAll('[data-toggle]').forEach(b => b.onclick = () => toggleUser(b.dataset.toggle));
+      $("usersTable").querySelectorAll('[data-reset]').forEach(b => b.onclick = () => resetPassword(b.dataset.reset));
+      $("usersTable").querySelectorAll('[data-remove]').forEach(b => b.onclick = () => removeRole(b.dataset.remove));
+    }
+
+    async function createUser(event) {
+      event.preventDefault(); showError("createError","");
+      const button = event.submitter; if (button) button.disabled = true;
+      try {
+        const result = await api("/api/admin/users", { method:"POST", body:JSON.stringify({ action:"create", email:$("newEmail").value.trim(), loginName:$("newLogin").value.trim(), roleKey:$("newRole").value }) });
+        $("createForm").reset(); await loadUsers(); showTemp(result.temporaryPassword);
+      } catch (e) { showError("createError", e.message); } finally { if (button) button.disabled = false; }
+    }
+
+    async function toggleUser(value) {
+      const [id, active] = value.split("|");
+      if (!confirm(active === "1" ? "¿Activar esta cuenta?" : "¿Desactivar esta cuenta?")) return;
+      try { await api("/api/admin/users", { method:"POST", body:JSON.stringify({ action:"set_active", userId:id, active:active === "1" }) }); await loadUsers(); } catch (e) { showError("usersError", e.message); }
+    }
+
+    async function assignRole(id) {
+      const select = document.querySelector(`[data-role-select="${id}"]`); if (!select || !select.value) return;
+      try { await api("/api/admin/users", { method:"POST", body:JSON.stringify({ action:"assign_role", userId:id, roleKey:select.value }) }); await loadUsers(); } catch (e) { showError("usersError", e.message); }
+    }
+
+    async function removeRole(value) {
+      const [id, roleKey] = value.split("|");
+      if (!confirm(`¿Retirar el perfil ${roleKey}?`)) return;
+      try { await api("/api/admin/users", { method:"POST", body:JSON.stringify({ action:"remove_role", userId:id, roleKey }) }); await loadUsers(); } catch (e) { showError("usersError", e.message); }
+    }
+
+    async function resetPassword(id) {
+      if (!confirm("¿Generar una contraseña temporal para esta cuenta? Se cerrarán sus sesiones.")) return;
+      try { const result = await api("/api/admin/users", { method:"POST", body:JSON.stringify({ action:"reset_password", userId:id }) }); showTemp(result.temporaryPassword); } catch (e) { showError("usersError", e.message); }
+    }
+
+    function showTemp(value) { $("tempValue").textContent = value || "No disponible"; $("tempDialog").showModal(); }
+    $("closeTemp").onclick = () => $("tempDialog").close();
+    $("copyTemp").onclick = async () => { try { await navigator.clipboard.writeText($("tempValue").textContent); } catch {} };
+    $("createForm").onsubmit = createUser;
+
+    async function loadAudit() {
+      showError("auditError","");
+      const data = await api("/api/admin/audit");
+      $("auditTable").innerHTML = `<table><thead><tr><th>Fecha</th><th>Actor</th><th>Acción</th><th>Recurso</th><th>Detalle</th></tr></thead><tbody>${(data.items||[]).map(a=>`<tr><td>${fmt(a.occurred_at)}</td><td>${esc(a.actor_subject || 'Sistema')}</td><td>${esc(a.event_type)}</td><td>${esc(a.resource_type)} ${esc(a.resource_id)}</td><td class="muted">${esc(JSON.stringify(a.metadata || {}))}</td></tr>`).join('') || '<tr><td colspan="5">Sin eventos.</td></tr>'}</tbody></table>`;
+    }
+
+    $("loginForm").onsubmit = async (event) => {
+      event.preventDefault(); showError("loginError","");
+      const button = event.submitter; if (button) button.disabled = true;
+      try {
+        await api("/api/admin/session", { method:"POST", body:JSON.stringify({ username:$("loginUser").value.trim(), password:$("loginPass").value }) });
+        await enterApp($("loginUser").value.trim());
+      } catch (e) { showError("loginError", e.status === 401 ? "Usuario o contraseña incorrectos." : e.message); } finally { if (button) button.disabled = false; }
+    };
+
+    $("logout").onclick = async () => { try { await api("/api/admin/session", { method:"DELETE" }); } catch {} location.reload(); };
+    $("refreshUsers").onclick = () => loadUsers().catch(e => showError("usersError", e.message));
+    $("refreshAudit").onclick = () => loadAudit().catch(e => showError("auditError", e.message));
+    document.querySelectorAll(".tabs button").forEach(b => b.onclick = () => showTab(b.dataset.tab));
+
+    $("togglePassword").onclick = () => { const type = $("newPassword").type === "password" ? "text" : "password"; ["currentPassword","newPassword","confirmPassword"].forEach(id => $(id).type = type); $("togglePassword").textContent = type === "text" ? "Ocultar contraseñas" : "Mostrar contraseñas"; };
+    $("passwordForm").onsubmit = async (event) => {
+      event.preventDefault(); showError("passwordError",""); $("passwordSuccess").hidden = true;
+      if ($("newPassword").value !== $("confirmPassword").value) { showError("passwordError","La confirmación no coincide."); return; }
+      const button = event.submitter; if (button) button.disabled = true;
+      try {
+        await api("/api/admin/change-password", { method:"POST", body:JSON.stringify({ currentPassword:$("currentPassword").value, newPassword:$("newPassword").value, confirmPassword:$("confirmPassword").value }) });
+        $("passwordSuccess").textContent = "Contraseña actualizada. Inicia sesión nuevamente."; $("passwordSuccess").hidden = false;
+        setTimeout(() => location.reload(), 1200);
+      } catch (e) { showError("passwordError", e.message); } finally { if (button) button.disabled = false; }
+    };
+
+    boot();
+  </script>
+</body>
+</html>

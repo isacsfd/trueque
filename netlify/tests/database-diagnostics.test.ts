@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { pingDatabase } from "../lib/database.ts";
-import handler from "./database-diagnostics.ts";
+import handler from "../functions/database-diagnostics.ts";
 
 vi.mock("../lib/database.ts", () => ({
   pingDatabase: vi.fn(),

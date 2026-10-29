@@ -8,3 +8,9 @@ coverage/
 *.tsbuildinfo
 .DS_Store
 Thumbs.db
+var/
+
+# Institutional source files are retained locally. This repository is public;
+# publish only their non-sensitive manifest and checksums in docs/inventario.
+/INVENTARIO TRUEQUE.xlsx
+/Libros para el Trueque Literario CH.xlsx

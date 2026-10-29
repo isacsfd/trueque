@@ -1,0 +1,10 @@
+Legacy path: db/migrations/0001_initial_schema.sql
+Git commit: 1043ae3 (initial project commit)
+SHA-256: cf4b22182eb763005f67ff56d03cc3726b95b2800813ccb443cfa363fc0a0a6a
+Status: proposed, not applied according to the previously reported project state.
+
+Exact legacy contents remain recoverable with:
+git show 1043ae3:db/migrations/0001_initial_schema.sql
+
+The active migration runner scans only versioned SQL files directly under
+db/migrations/, so this checksum record is never executed.
