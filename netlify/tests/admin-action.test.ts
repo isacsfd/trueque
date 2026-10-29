@@ -44,19 +44,27 @@ describe("admin action API", () => {
     );
   });
 
-  it("requires a recorded reason for approval and rejection", async () => {
+  it("approves without a reason and requires one only for rejection", async () => {
     vi.mocked(requireAdmin).mockReturnValue({ username: "admin", actorUserId: 7, expiresAt: 9999999999 });
-
-    const missing = await handler(createRequest({ action: "request.approve", requestId: 42 }));
-    expect(missing.status).toBe(400);
-    expect(queryAdmin).not.toHaveBeenCalled();
-
     vi.mocked(queryAdmin).mockResolvedValue([{ set_request_status: null }]);
-    const approved = await handler(createRequest({ action: "request.approve", requestId: 42, reason: "Documentación revisada" }));
+
+    const approved = await handler(createRequest({ action: "request.approve", requestId: 42 }));
     expect(approved.status).toBe(200);
     expect(queryAdmin).toHaveBeenCalledWith(
       expect.stringContaining("set_request_status"),
-      [42, 7, "Documentación revisada"],
+      [42, 7, null],
+    );
+
+    vi.mocked(queryAdmin).mockClear();
+    const missing = await handler(createRequest({ action: "request.reject", requestId: 42 }));
+    expect(missing.status).toBe(400);
+    expect(queryAdmin).not.toHaveBeenCalled();
+
+    const rejected = await handler(createRequest({ action: "request.reject", requestId: 42, reason: "Documentación incompleta" }));
+    expect(rejected.status).toBe(200);
+    expect(queryAdmin).toHaveBeenCalledWith(
+      expect.stringContaining("set_request_status"),
+      [42, 7, "Documentación incompleta"],
     );
   });
 

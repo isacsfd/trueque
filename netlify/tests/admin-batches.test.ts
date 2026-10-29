@@ -1,7 +1,5 @@
 // @vitest-environment node
-import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { readFile } from "node:fs/promises";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { requireAdmin } from "../lib/auth.ts";
 import { requireAdminPermission } from "../lib/admin-permissions.ts";
@@ -42,21 +40,18 @@ function formRequest(fields: Record<string, string>, file: File): Request {
 }
 
 describe("administrative inventory batches API", () => {
-  let directory: string;
   let workbook: Buffer;
+  let qaWorkbook: Buffer;
 
   beforeEach(async () => {
-    directory = await mkdtemp(join(tmpdir(), "trueque-batches-"));
-    vi.stubEnv("BATCH_STORAGE_DIR", directory);
     vi.mocked(requireAdmin).mockReturnValue({ username: "admin", actorUserId: 7, expiresAt: 9999999999 });
     vi.mocked(requireAdminPermission).mockResolvedValue(undefined);
     workbook = await readFile(new URL("../../INVENTARIO TRUEQUE.xlsx", import.meta.url));
+    qaWorkbook = await readFile(new URL("./fixtures/qa-import.xlsx", import.meta.url));
   });
 
-  afterEach(async () => {
+  afterEach(() => {
     vi.clearAllMocks();
-    vi.unstubAllEnvs();
-    await rm(directory, { recursive: true, force: true });
   });
 
   it("inspects a real XLSX and returns headers without touching the database", async () => {
@@ -76,14 +71,36 @@ describe("administrative inventory batches API", () => {
     expect(await response.text()).toContain("ZIP/XLSX");
   });
 
-  it("stores a prevalidation and keeps the original file private", async () => {
+  it("blocks re-importing the two workbooks already loaded into the event inventory", async () => {
     vi.mocked(queryAdmin).mockImplementation(async (sql) => {
       if (sql.includes("FROM public.bibliographic_records")) return [];
       if (sql.includes("FROM public.copies")) return [];
+      return [];
+    });
+    const response = await batchHandler(formRequest({
+      action: "prevalidate",
+      sheetName: "Hoja1",
+      headerRow: "2",
+      mapping: JSON.stringify({ title: "TITULO", author: "AUTOR", publisher: "EDITORIAL" }),
+      idempotencyKey: "11111111-1111-4111-8111-111111111111",
+    }, new File([new Uint8Array(workbook)], "INVENTARIO TRUEQUE.xlsx")));
+    expect(response.status).toBe(409);
+    expect(await response.text()).toContain("ya fue importado");
+    expect(queryAdmin).not.toHaveBeenCalledWith(
+      expect.stringContaining("store_inventory_batch"),
+      expect.anything(),
+    );
+  });
+
+  it("stores a prevalidation without retaining the workbook", async () => {
+    vi.mocked(queryAdmin).mockImplementation(async (sql) => {
+      if (sql.includes("FROM public.bibliographic_records")) return [];
+      if (sql.includes("FROM public.copies")) return [];
+      if (sql.includes("WHERE idempotency_key = $1")) return [];
       if (sql.includes("store_inventory_batch")) {
         return [{
-          batch_id: "12", status: "prevalidated", total_rows: 67, valid_rows: 63,
-          warning_rows: 4, rejected_rows: 0, duplicate_rows: 0,
+          batch_id: "12", status: "prevalidated", total_rows: 4, valid_rows: 2,
+          warning_rows: 1, rejected_rows: 1, duplicate_rows: 0,
         }];
       }
       return [];
@@ -91,17 +108,20 @@ describe("administrative inventory batches API", () => {
 
     const response = await batchHandler(formRequest({
       action: "prevalidate",
-      sheetName: "Hoja1",
-      headerRow: "2",
-      mapping: JSON.stringify({ title: "TITULO", author: "AUTOR", publisher: "EDITORIAL" }),
+      sheetName: "Inventario QA",
+      headerRow: "1",
+      mapping: JSON.stringify({ title: "TITULO", author: "AUTOR", publisher: "EDITORIAL", isbn: "ISBN", location: "BIBLIOTECA" }),
       observations: "Lote de prueba",
       idempotencyKey: "11111111-1111-4111-8111-111111111111",
-    }, new File([new Uint8Array(workbook)], "inventario.xlsx")));
+    }, new File([new Uint8Array(qaWorkbook)], "qa-import.xlsx")));
     const body = await response.json() as { mode: string; batchId: string; validRows: number };
 
     expect(response.status).toBe(201);
-    expect(body).toMatchObject({ mode: "prevalidated", batchId: "12", validRows: 63 });
-    expect(await readdir(directory)).toHaveLength(1);
+    expect(body).toMatchObject({ mode: "prevalidated", batchId: "12", validRows: 2 });
+    expect(queryAdmin).toHaveBeenCalledWith(
+      expect.stringContaining("store_inventory_batch"),
+      expect.arrayContaining(["qa-import.xlsx", "Lote de prueba"]),
+    );
   });
 
   it("confirms and cancels batches through permissioned routines", async () => {
@@ -114,12 +134,14 @@ describe("administrative inventory batches API", () => {
     }), "POST"));
     expect(confirmed.status).toBe(200);
     expect(await confirmed.json()).toMatchObject({ insertedRows: 2, reusedRows: 1 });
+    expect(requireAdminPermission).toHaveBeenCalledWith(7, "inventory.batches.confirm");
 
     const cancelled = await cancelHandler(adminRequest("/api/admin/batches/cancel", JSON.stringify({
       batchId: 13, idempotencyKey: "11111111-1111-4111-8111-111111111112",
     }), "POST"));
     expect(cancelled.status).toBe(200);
     expect(await cancelled.json()).toMatchObject({ status: "cancelled" });
+    expect(requireAdminPermission).toHaveBeenCalledWith(7, "inventory.batches.import");
   });
 
   it("lists batches and neutralizes CSV formula injection in reports", async () => {

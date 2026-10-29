@@ -17,7 +17,7 @@ describe("administrative actor revalidation", () => {
     vi.mocked(queryAdmin).mockResolvedValue([{ is_active: true }]);
     await expect(assertActiveAdminActor(7)).resolves.toBeUndefined();
     expect(queryAdmin).toHaveBeenCalledWith(
-      "SELECT is_active FROM public.app_users WHERE id = $1",
+      expect.stringContaining("FROM public.app_users"),
       [7],
     );
   });

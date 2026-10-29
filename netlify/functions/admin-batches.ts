@@ -3,7 +3,6 @@ import { basename } from "node:path";
 import { requireAdmin } from "../lib/auth.ts";
 import { requireAdminPermission } from "../lib/admin-permissions.ts";
 import { queryAdmin } from "../lib/database.ts";
-import { getBatchStorage, newUniqueObjectKey } from "../lib/evidence-storage.ts";
 import { inspectSheets, validateBatch, type BatchColumnMapping } from "../lib/inventory-batch.ts";
 import { parseXlsx, MAX_XLSX_BYTES } from "../lib/xlsx.ts";
 import { ApiError, assertSameOrigin, json, mapError, methodNotAllowed } from "../lib/http.ts";
@@ -17,6 +16,11 @@ interface BatchRowResult {
   rejected_rows: number;
   duplicate_rows: number;
 }
+
+const knownImportedFileHashes = new Map<string, string>([
+  ["86d6602a23aa6d95045c5a40eece9c3dd3ce14e7349adf59e19ce37110bd846d", "INVENTARIO TRUEQUE.xlsx"],
+  ["433d0246f3266374cae0a5ccaab28fad05246ec121f9b6ca648661671c5c9bb3", "Libros para el Trueque Literario CH.xlsx"],
+]);
 
 function parseUuid(value: string): string {
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)) {
@@ -139,6 +143,14 @@ export default async function handler(request: Request): Promise<Response> {
     }
 
     const digest = createHash("sha256").update(buffer).digest();
+    const knownFile = knownImportedFileHashes.get(digest.toString("hex"));
+    if (knownFile) {
+      throw new ApiError(
+        409,
+        "already_imported",
+        `El archivo ${knownFile} ya fue importado al inventario del evento. No se volverá a insertar. Para agregar ejemplares nuevos, crea un archivo con solo esos ejemplares.`,
+      );
+    }
     const existingBatch = await queryAdmin<{
       batch_id: string; status: string; total_rows: number; valid_rows: number;
       warning_rows: number; rejected_rows: number; duplicate_rows: number; file_sha256: string;
@@ -165,12 +177,12 @@ export default async function handler(request: Request): Promise<Response> {
     }
 
     const fileName = basename((file as File).name || "lote.xlsx").slice(0, 255);
-    const storageKey = newUniqueObjectKey("batch", "xlsx");
-    const storage = getBatchStorage();
-    await storage.put(storageKey, buffer);
+    // The source bytes are intentionally not retained. The SHA-256 digest and
+    // the batch metadata provide the audit trail without storing the workbook
+    // or its possible personal data in a private bucket.
+    const storageKey = `batch-${idempotencyKey}.xlsx`;
 
-    try {
-      const rows = await queryAdmin<BatchRowResult>(
+    const rows = await queryAdmin<BatchRowResult>(
         `SELECT * FROM public.store_inventory_batch(
           $1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8, $9, $10, $11
         )`,
@@ -200,10 +212,6 @@ export default async function handler(request: Request): Promise<Response> {
         rejectedRows: row.rejected_rows,
         duplicateRows: row.duplicate_rows,
       });
-    } catch (error) {
-      await storage.delete(storageKey).catch(() => undefined);
-      throw error;
-    }
   } catch (error) {
     return mapError(error);
   }

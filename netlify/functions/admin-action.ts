@@ -78,7 +78,9 @@ export default async function handler(request: Request): Promise<Response> {
       }
       case "request.approve": {
         const requestId = numberField(body, "requestId");
-        const reason = stringField(body, "reason", { min: 3, max: 3000 });
+        // Approval does not require a rejection reason. An optional note may be
+        // recorded in the request history without inventing a value.
+        const reason = optionalStringField(body, "reason", 3000);
         rows = await queryAdmin("SELECT public.set_request_status($1, 'approved', $2, $3)", [
           requestId, actor, reason,
         ]);
@@ -86,7 +88,14 @@ export default async function handler(request: Request): Promise<Response> {
       }
       case "request.reject": {
         const requestId = numberField(body, "requestId");
-        const reason = stringField(body, "reason", { min: 3, max: 3000 });
+        const reason = optionalStringField(body, "reason", 3000);
+        if (!reason || reason.length < 3) {
+          throw new ApiError(
+            400,
+            "reason_required",
+            "Indica el motivo del rechazo (mínimo 3 caracteres).",
+          );
+        }
         rows = await queryAdmin("SELECT public.set_request_status($1, 'rejected', $2, $3)", [
           requestId, actor, reason,
         ]);

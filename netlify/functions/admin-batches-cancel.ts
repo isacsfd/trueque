@@ -1,4 +1,5 @@
 import { requireAdmin } from "../lib/auth.ts";
+import { requireAdminPermission } from "../lib/admin-permissions.ts";
 import { queryAdmin } from "../lib/database.ts";
 import {
   ApiError,
@@ -17,6 +18,7 @@ export default async function handler(request: Request): Promise<Response> {
   try {
     assertSameOrigin(request);
     const session = requireAdmin(request);
+    await requireAdminPermission(session.actorUserId, "inventory.batches.import");
     const body = await readJson(request);
     const batchId = numberField(body, "batchId");
     const idempotencyKey = uuidField(body, "idempotencyKey");

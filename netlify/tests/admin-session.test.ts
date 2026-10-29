@@ -63,7 +63,7 @@ describe("administrative session origin guard", () => {
     const cookie = response.headers.get("set-cookie") ?? "";
     expect(cookie).toContain("HttpOnly");
     expect(cookie).toContain("SameSite=Strict");
-    expect(assertActiveAdminActor).toHaveBeenCalledWith(7);
+    expect(assertActiveAdminActor).toHaveBeenCalledWith(7, 0);
   });
 
   it("returns 429 after repeated login failures", async () => {
@@ -108,7 +108,7 @@ describe("administrative session origin guard", () => {
 
     const response = await handler(sessionRequest(token));
     expect(response.status).toBe(401);
-    expect(assertActiveAdminActor).toHaveBeenCalledWith(7);
+    expect(assertActiveAdminActor).toHaveBeenCalledWith(7, 0);
   });
 
   it("accepts an existing session while the actor remains active", async () => {

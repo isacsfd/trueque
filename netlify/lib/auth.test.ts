@@ -20,7 +20,12 @@ describe("administrative session", () => {
     vi.stubEnv("SESSION_SECRET", "test-session-secret-with-at-least-32-bytes");
     const future = Math.floor(Date.now() / 1000) + 60;
     const token = createSessionToken({ username: "admin", actorUserId: 7, expiresAt: future });
-    expect(readSessionToken(token)).toEqual({ username: "admin", actorUserId: 7, expiresAt: future });
+    expect(readSessionToken(token)).toEqual({
+      username: "admin",
+      actorUserId: 7,
+      expiresAt: future,
+      sessionVersion: 0,
+    });
     expect(readSessionToken(`${token}x`)).toBeNull();
 
     const expired = createSessionToken({
@@ -55,20 +60,20 @@ describe("administrative session", () => {
     vi.unstubAllEnvs();
   });
 
-  it("rejects duplicate usernames or actor bindings in ADMIN_USERS", () => {
+  it("rejects duplicate usernames or actor bindings in ADMIN_USERS", async () => {
     const hash = hashPassword("correct horse battery staple");
     vi.stubEnv("SESSION_SECRET", "test-session-secret-with-at-least-32-bytes");
     vi.stubEnv("ADMIN_USERS", JSON.stringify([
       { username: "admin", passwordHash: hash, actorUserId: 7 },
       { username: "admin", passwordHash: hash, actorUserId: 8 },
     ]));
-    expect(() => loginAdmin("admin", "correct horse battery staple", true)).toThrow(/no está configurada/);
+    await expect(loginAdmin("admin", "correct horse battery staple", true)).rejects.toThrow(/no está configurada/);
 
     vi.stubEnv("ADMIN_USERS", JSON.stringify([
       { username: "admin", passwordHash: hash, actorUserId: 7 },
       { username: "other", passwordHash: hash, actorUserId: 7 },
     ]));
-    expect(() => loginAdmin("admin", "correct horse battery staple", true)).toThrow(/no está configurada/);
+    await expect(loginAdmin("admin", "correct horse battery staple", true)).rejects.toThrow(/no está configurada/);
     vi.unstubAllEnvs();
   });
 
@@ -76,7 +81,7 @@ describe("administrative session", () => {
     const hash = hashPassword("correct horse battery staple");
     vi.stubEnv("ADMIN_USERS", JSON.stringify([{ username: "admin", passwordHash: hash, actorUserId: 7 }]));
     vi.stubEnv("SESSION_SECRET", "test-session-secret-with-at-least-32-bytes");
-    expect(() => loginAdmin("admin", "wrong", true)).toThrow(/Usuario o contraseña/);
+    await expect(loginAdmin("admin", "wrong", true)).rejects.toThrow(/Usuario o contraseña/);
     const result = await loginAdmin("admin", "correct horse battery staple", true);
     expect(result.session.actorUserId).toBe(7);
     expect(result.cookie).toContain("HttpOnly");

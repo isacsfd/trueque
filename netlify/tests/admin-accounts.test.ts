@@ -1,6 +1,7 @@
 // @vitest-environment node
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { requireAdmin } from "../lib/auth.ts";
+import { assertActiveAdminActor } from "../lib/admin-identity.ts";
 import { requireAdminPermission } from "../lib/admin-permissions.ts";
 import { DatabaseQueryError, queryAdmin } from "../lib/database.ts";
 import handler from "../functions/admin-accounts.ts";
@@ -10,6 +11,7 @@ vi.mock("../lib/auth.ts", async (importOriginal) => {
   return { ...actual, requireAdmin: vi.fn() };
 });
 vi.mock("../lib/admin-permissions.ts", () => ({ requireAdminPermission: vi.fn() }));
+vi.mock("../lib/admin-identity.ts", () => ({ assertActiveAdminActor: vi.fn() }));
 vi.mock("../lib/database.ts", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../lib/database.ts")>();
   return { ...actual, queryAdmin: vi.fn(), query: vi.fn() };
@@ -28,6 +30,10 @@ function request(method = "GET", body?: unknown, marker = true): Request {
 }
 
 describe("administrative account API", () => {
+  beforeEach(() => {
+    vi.mocked(assertActiveAdminActor).mockResolvedValue(undefined);
+  });
+
   afterEach(() => {
     vi.clearAllMocks();
   });

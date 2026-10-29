@@ -50,11 +50,13 @@ export default async function handler(request: Request): Promise<Response> {
     if (!batch) throw new ApiError(404, "not_found", "No se encontró el lote.");
 
     const rows = await queryAdmin<BatchRow>(
-      `SELECT source_row, status, errors, warnings, mapped_data, inventory_code,
-              bibliographic_record_id, copy_id
-       FROM public.inventory_batch_rows
-       WHERE batch_id = $1
-       ORDER BY source_row`,
+      `SELECT r.source_row, r.status, r.errors, r.warnings, r.mapped_data,
+              coalesce(r.inventory_code, c.inventory_code) AS inventory_code,
+              r.bibliographic_record_id, r.copy_id
+       FROM public.inventory_batch_rows r
+       LEFT JOIN public.copies c ON c.id = r.copy_id
+       WHERE r.batch_id = $1
+       ORDER BY r.source_row`,
       [id],
     );
 

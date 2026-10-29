@@ -29,10 +29,12 @@ export default async function handler(request: Request): Promise<Response> {
       warnings: string[];
       inventory_code: string | null;
     }>(
-      `SELECT source_row, status, mapped_data, errors, warnings, inventory_code
-       FROM public.inventory_batch_rows
-       WHERE batch_id = $1
-       ORDER BY source_row`,
+      `SELECT r.source_row, r.status, r.mapped_data, r.errors, r.warnings,
+              coalesce(r.inventory_code, c.inventory_code) AS inventory_code
+       FROM public.inventory_batch_rows r
+       LEFT JOIN public.copies c ON c.id = r.copy_id
+       WHERE r.batch_id = $1
+       ORDER BY r.source_row`,
       [id],
     );
     if (rows.length === 0) {

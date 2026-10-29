@@ -80,7 +80,7 @@ export function inspectSheets(sheet: XlsxSheet, requestedHeaderRow?: number): Sh
     }
   })();
   const sampleRows = sheet.rows
-    .filter((row) => row.rowNumber >= headerRow)
+    .filter((row) => row.rowNumber > headerRow)
     .slice(0, 12)
     .map((row) => ({ rowNumber: row.rowNumber, values: rowValues(row, Math.max(headers.length, 1)) }));
   return { name: sheet.name, headerRow, headers, sampleRows };
