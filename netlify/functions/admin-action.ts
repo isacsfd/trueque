@@ -55,6 +55,16 @@ function optionalDate(body: Record<string, unknown>, key: string): string | null
   return value;
 }
 
+function optionalScheduledAt(body: Record<string, unknown>): string | null {
+  const value = optionalDate(body, "scheduledAt");
+  if (!value) return null;
+  // A calendar date without an offset would otherwise be interpreted in the
+  // database session timezone and could shift to the previous day in Bogota.
+  return /^\d{4}-\d{2}-\d{2}$/.test(value)
+    ? `${value}T12:00:00-05:00`
+    : value;
+}
+
 export default async function handler(request: Request): Promise<Response> {
   if (request.method !== "POST") return methodNotAllowed();
 
@@ -117,18 +127,18 @@ export default async function handler(request: Request): Promise<Response> {
       }
       case "exchange.plan": {
         const requestId = numberField(body, "requestId");
-        const receiptCode = stringField(body, "receiptCode", { max: 120 });
+        const scheduledAt = optionalScheduledAt(body);
         const planningKey = uuidField(body, "planningKey");
         rows = await queryAdmin(
-          "SELECT * FROM public.plan_exchange($1, $2, $3, $4)",
-          [requestId, receiptCode, planningKey, actor],
+          "SELECT * FROM public.plan_exchange_with_dropoff($1, $2, $3, $4)",
+          [requestId, scheduledAt, planningKey, actor],
         );
         break;
       }
       case "delivery.schedule": {
         const exchangeId = numberField(body, "exchangeId");
         const deliveryType = oneOfField(body, "deliveryType", deliveryTypes);
-        const scheduledAt = optionalDate(body, "scheduledAt");
+        const scheduledAt = optionalScheduledAt(body);
         const idempotencyKey = uuidField(body, "idempotencyKey");
         rows = await queryAdmin(
           "SELECT public.schedule_delivery($1, $2, coalesce($3::timestamptz, clock_timestamp()), $4, $5)",

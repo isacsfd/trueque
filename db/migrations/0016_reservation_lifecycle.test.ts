@@ -13,6 +13,7 @@ const migrationNames = [
   "0015_release_expired_reservations.sql",
   "0016_reservation_lifecycle.sql",
   "0017_public_request_status.sql",
+  "0018_plan_exchange_delivery.sql",
 ];
 
 let sequence = 0;

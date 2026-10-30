@@ -207,7 +207,7 @@ async function createReservedScenario(base, label) {
 async function receiveBook(base, flow) {
   const dropoffKey = uuid();
   const dropoff = await admin.query(
-    "SELECT public.schedule_delivery($1, 'offered_book_dropoff', clock_timestamp() + interval '1 hour', $2, $3)",
+    "SELECT public.schedule_delivery($1, 'offered_book_dropoff', clock_timestamp(), $2, $3)",
     [flow.exchangeId, dropoffKey, base.actor.manager.id],
   );
   await admin.query(

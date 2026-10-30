@@ -211,7 +211,6 @@ export interface AdminActionBody {
   submissionId?: string;
   reviewAction?: "start_review" | "request_information" | "preapprove" | "reject";
   notes?: string;
-  receiptCode?: string;
   planningKey?: string;
   exchangeId?: string;
   deliveryType?: DeliveryType;

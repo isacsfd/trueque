@@ -21,6 +21,13 @@ import { InventoryBatches } from "./InventoryBatches";
 import { AdminStatsPanel } from "./AdminStatsPanel";
 import { AccountPanel } from "./AccountPanel";
 import { AccountsPanel } from "./AccountsPanel";
+import {
+  deliveryTiming,
+  formatInstitutionalDateOnly,
+  formatInstitutionalDateTime,
+  proposedDeliveryInstant,
+  todayInInstitutionalTimeZone,
+} from "../lib/institutional-time";
 import type { AdminActionBody, AdminWorkbenchItem } from "../lib/types";
 
 function newKey(): string {
@@ -68,6 +75,12 @@ export function AdminPanel() {
   const [busyRequestId, setBusyRequestId] = useState<string | null>(null);
   const [tab, setTab] = useState<"requests" | "batches" | "stats" | "accounts" | "account">("requests");
   const [requestFilter, setRequestFilter] = useState("all");
+  const [now, setNow] = useState(() => new Date());
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(new Date()), 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   async function refresh() {
     const workbench = await fetchAdminWorkbench();
@@ -207,6 +220,7 @@ export function AdminPanel() {
               <AdminRequestCard
                 key={item.requestId}
                 item={item}
+                now={now}
                 busy={busyRequestId === item.requestId}
                 onAction={(body) => act(item, body)}
               />
@@ -222,12 +236,114 @@ export function AdminPanel() {
   );
 }
 
-function AdminRequestCard({
+function PlanExchangeForm({
   item,
   busy,
   onAction,
 }: {
   item: AdminWorkbenchItem;
+  busy: boolean;
+  onAction: (body: Omit<AdminActionBody, "idempotencyKey"> & { idempotencyKey?: string }) => Promise<void>;
+}) {
+  const today = todayInInstitutionalTimeZone();
+  const [scheduledDate, setScheduledDate] = useState(today);
+  const [error, setError] = useState<string | null>(null);
+  const preview = scheduledDate ? formatInstitutionalDateOnly(scheduledDate) : "Sin fecha";
+
+  return (
+    <div className="plan-exchange">
+      <label>
+        Fecha propuesta de entrega
+        <input
+          type="date"
+          value={scheduledDate}
+          min={today}
+          onChange={(event) => {
+            setScheduledDate(event.target.value);
+            setError(null);
+          }}
+        />
+      </label>
+      <p className="action-note">
+        Entrega propuesta: {preview}. Programar no confirma la entrega física.
+      </p>
+      {error ? <p className="field-error" role="alert">{error}</p> : null}
+      <ActionButton
+        label="Programar intercambio"
+        busy={busy}
+        onClick={() => {
+          try {
+            void onAction({
+              action: "exchange.plan",
+              requestId: item.requestId,
+              scheduledAt: proposedDeliveryInstant(scheduledDate),
+              planningKey: newKey(),
+            });
+          } catch {
+            setError("Selecciona una fecha válida.");
+          }
+        }}
+      />
+    </div>
+  );
+}
+
+function ScheduleDropoffForm({
+  item,
+  busy,
+  onAction,
+}: {
+  item: AdminWorkbenchItem;
+  busy: boolean;
+  onAction: (body: Omit<AdminActionBody, "idempotencyKey"> & { idempotencyKey?: string }) => Promise<void>;
+}) {
+  const today = todayInInstitutionalTimeZone();
+  const [scheduledDate, setScheduledDate] = useState(today);
+  const [error, setError] = useState<string | null>(null);
+
+  return (
+    <div className="plan-exchange">
+      <label>
+        Fecha de entrega
+        <input
+          type="date"
+          value={scheduledDate}
+          min={today}
+          onChange={(event) => {
+            setScheduledDate(event.target.value);
+            setError(null);
+          }}
+        />
+      </label>
+      {error ? <p className="field-error" role="alert">{error}</p> : null}
+      <ActionButton
+        label="Programar entrega"
+        busy={busy}
+        onClick={() => {
+          try {
+            void onAction({
+              action: "delivery.schedule",
+              exchangeId: item.exchangeId!,
+              deliveryType: "offered_book_dropoff",
+              scheduledAt: proposedDeliveryInstant(scheduledDate),
+            });
+          } catch {
+            setError("Selecciona una fecha válida.");
+          }
+        }}
+      />
+    </div>
+  );
+}
+
+function AdminRequestCard({
+  item,
+  now,
+  busy,
+  onAction,
+}: {
+  item: AdminWorkbenchItem;
+  now: Date;
   busy: boolean;
   onAction: (body: Omit<AdminActionBody, "idempotencyKey"> & { idempotencyKey?: string }) => Promise<void>;
 }) {
@@ -238,6 +354,12 @@ function AdminRequestCard({
     item.exchangeStatus === "in_process" &&
     dropoff?.status === "completed" &&
     handover?.status === "completed",
+  );
+  const dropoffTiming = dropoff ? deliveryTiming(dropoff.scheduledAt, now) : "unscheduled";
+  const dropoffCanConfirm = Boolean(
+    dropoff &&
+    (dropoff.status === "scheduled" || dropoff.status === "in_progress") &&
+    dropoffTiming !== "future",
   );
 
   return (
@@ -351,10 +473,23 @@ function AdminRequestCard({
             <li key={delivery.id}>
               <span>{deliveryTypeLabel(delivery.type)}</span>
               <span className={`status-pill status-${delivery.status}`}>{deliveryStatusLabel(delivery.status)}</span>
+              {delivery.scheduledAt ? <span className="quiet">Programada: {formatInstitutionalDateTime(delivery.scheduledAt)}</span> : null}
               {delivery.receiptReference ? <span className="quiet">Comprobante: {delivery.receiptReference}</span> : null}
             </li>
           ))}
         </ul>
+      ) : null}
+
+      {dropoff && (dropoff.status === "scheduled" || dropoff.status === "in_progress") ? (
+        <div className={`notice ${dropoffTiming === "overdue" ? "notice-warning" : ""}`} role="status">
+          {dropoffTiming === "future"
+            ? `Entrega propuesta: ${formatInstitutionalDateTime(dropoff.scheduledAt!)}. La confirmación se habilitará ese día.`
+            : dropoffTiming === "today"
+              ? `Entrega propuesta para hoy: ${formatInstitutionalDateTime(dropoff.scheduledAt!)}. Confirma cuando se realice la entrega física.`
+              : dropoffTiming === "overdue"
+                ? `Entrega atrasada: estaba propuesta para ${formatInstitutionalDateTime(dropoff.scheduledAt!)}.`
+                : "Entrega programada sin fecha registrada."}
+        </div>
       ) : null}
 
       <div className="action-grid">
@@ -391,30 +526,20 @@ function AdminRequestCard({
           </>
         ) : null}
         {item.requestStatus === "approved" ? (
-          <ActionButton
-            label="Programar intercambio"
-            onClick={() => {
-              const receiptCode = promptText("Código de recepción:");
-              if (receiptCode) void onAction({ action: "exchange.plan", requestId: item.requestId, receiptCode, planningKey: newKey() });
-            }}
-            busy={busy}
-          />
+          <PlanExchangeForm item={item} busy={busy} onAction={onAction} />
         ) : null}
         {item.exchangeStatus === "planned" && item.receptionStatus === "awaiting_delivery" && !dropoff ? (
-          <ActionButton
-            label="Programar entrega del libro"
-            onClick={() => onAction({ action: "delivery.schedule", exchangeId: item.exchangeId!, deliveryType: "offered_book_dropoff" })}
-            busy={busy}
-          />
+          <ScheduleDropoffForm item={item} busy={busy} onAction={onAction} />
         ) : null}
-        {dropoff && (dropoff.status === "scheduled" || dropoff.status === "in_progress") ? (
+        {dropoffCanConfirm ? (
           <ConfirmDeliveryButton
+            label="Entregado"
             busy={busy}
             onAction={(receiptReference) => onAction({
               action: "delivery.confirm",
-              deliveryId: dropoff.id,
+              deliveryId: dropoff!.id,
               receiptReference,
-              idempotencyKey: dropoff.idempotencyKey,
+              idempotencyKey: dropoff!.idempotencyKey,
             })}
           />
         ) : null}

@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { fetchAdminWorkbench, fetchEvidenceBlob, getAdminSession } from "../lib/api";
+import { fetchAdminWorkbench, fetchEvidenceBlob, getAdminSession, runAdminAction } from "../lib/api";
+import { institutionalDate, proposedDeliveryInstant, todayInInstitutionalTimeZone } from "../lib/institutional-time";
 import { AdminPanel } from "./AdminPanel";
 
 vi.mock("../lib/api", () => ({
@@ -62,7 +63,137 @@ const item = {
 describe("panel administrativo", () => {
   afterEach(() => {
     cleanup();
+    vi.restoreAllMocks();
     vi.clearAllMocks();
+  });
+
+  function scheduledDay(offset: number): string {
+    const base = new Date(proposedDeliveryInstant(todayInInstitutionalTimeZone()));
+    base.setUTCDate(base.getUTCDate() + offset);
+    return proposedDeliveryInstant(institutionalDate(base));
+  }
+
+  function plannedItem(scheduledAt: string | null = scheduledDay(0)) {
+    return {
+      ...item,
+      requestStatus: "scheduled" as const,
+      exchangeId: "10",
+      exchangeStatus: "planned" as const,
+      receptionId: "20",
+      receptionStatus: "awaiting_delivery" as const,
+      deliveries: scheduledAt
+        ? [{
+            id: "30",
+            type: "offered_book_dropoff" as const,
+            status: "scheduled" as const,
+            scheduledAt,
+            completedAt: null,
+            receiptReference: null,
+            idempotencyKey: "11111111-1111-4111-8111-111111111111",
+          }]
+        : [],
+    };
+  }
+
+  it("programa con la fecha de hoy y sin campo de código de recepción", async () => {
+    vi.mocked(getAdminSession).mockResolvedValue({ username: "admin" });
+    vi.mocked(fetchAdminWorkbench).mockResolvedValue([{ ...item, requestStatus: "approved" as const }]);
+
+    render(<AdminPanel />);
+
+    await waitFor(() => {
+      expect(screen.getByText(/IUB-2026-TEST/)).toBeInTheDocument();
+    });
+    const dateInput = screen.getByLabelText("Fecha propuesta de entrega") as HTMLInputElement;
+    const today = todayInInstitutionalTimeZone();
+    expect(dateInput.value).toBe(today);
+    expect(screen.queryByText(/Código de recepción/i)).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Programar intercambio" }));
+
+    await waitFor(() => {
+      expect(runAdminAction).toHaveBeenCalledWith(expect.objectContaining({
+        action: "exchange.plan",
+        requestId: "1",
+        scheduledAt: `${today}T12:00:00-05:00`,
+      }));
+    });
+    expect(vi.mocked(runAdminAction).mock.calls[0]?.[0]).not.toHaveProperty("receiptCode");
+  });
+
+  it("para una entrega de hoy muestra únicamente Entregado y usa confirm_delivery", async () => {
+    vi.mocked(getAdminSession).mockResolvedValue({ username: "admin" });
+    vi.mocked(fetchAdminWorkbench).mockResolvedValue([plannedItem()]);
+    const prompt = vi.spyOn(window, "prompt").mockReturnValue("COMP-001");
+
+    render(<AdminPanel />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Entregado" })).toBeInTheDocument();
+    });
+    expect(screen.queryByRole("button", { name: "Programar entrega" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Programar intercambio" })).not.toBeInTheDocument();
+    expect(screen.getByText(/Entrega propuesta para hoy/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Entregado" }));
+
+    await waitFor(() => {
+      expect(runAdminAction).toHaveBeenCalledWith(expect.objectContaining({
+        action: "delivery.confirm",
+        deliveryId: "30",
+        receiptReference: "COMP-001",
+        idempotencyKey: "11111111-1111-4111-8111-111111111111",
+      }));
+    });
+    expect(prompt).toHaveBeenCalledWith("Comprobante de la entrega:", "");
+  });
+
+  it("para una entrega futura no habilita Entregado y muestra la fecha", async () => {
+    vi.mocked(getAdminSession).mockResolvedValue({ username: "admin" });
+    vi.mocked(fetchAdminWorkbench).mockResolvedValue([plannedItem(scheduledDay(1))]);
+
+    render(<AdminPanel />);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Entrega propuesta:/)).toBeInTheDocument();
+    });
+    expect(screen.queryByRole("button", { name: "Entregado" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Programar entrega" })).not.toBeInTheDocument();
+    expect(screen.getByText(/habilitará ese día/)).toBeInTheDocument();
+  });
+
+  it("para una entrega vencida muestra Entrega atrasada y permite confirmar", async () => {
+    vi.mocked(getAdminSession).mockResolvedValue({ username: "admin" });
+    vi.mocked(fetchAdminWorkbench).mockResolvedValue([plannedItem(scheduledDay(-1))]);
+
+    render(<AdminPanel />);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Entrega atrasada/)).toBeInTheDocument();
+    });
+    expect(screen.getByRole("button", { name: "Entregado" })).toBeInTheDocument();
+  });
+
+  it("mantiene una salida para intercambios históricos sin entrega programada", async () => {
+    vi.mocked(getAdminSession).mockResolvedValue({ username: "admin" });
+    vi.mocked(fetchAdminWorkbench).mockResolvedValue([plannedItem(null)]);
+
+    render(<AdminPanel />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Programar entrega" })).toBeInTheDocument();
+    });
+    expect(screen.getByLabelText("Fecha de entrega")).toHaveValue(todayInInstitutionalTimeZone());
+
+    fireEvent.click(screen.getByRole("button", { name: "Programar entrega" }));
+
+    await waitFor(() => {
+      expect(runAdminAction).toHaveBeenCalledWith(expect.objectContaining({
+        action: "delivery.schedule",
+        exchangeId: "10",
+        deliveryType: "offered_book_dropoff",
+      }));
+    });
   });
 
   it("muestra la solicitud y la acción permitida sin datos personales", async () => {

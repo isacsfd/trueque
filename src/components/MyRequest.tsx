@@ -73,7 +73,7 @@ export function MyRequest({ initialCode }: { initialCode?: string }) {
           void lookup();
         }}
       >
-        <label>Código de solicitud<input value={code} onChange={(event) => setCode(event.target.value)} maxLength={80} required placeholder="IUB-2026-XXXXXXXX" /></label>
+        <label>Código de solicitud o reserva<input value={code} onChange={(event) => setCode(event.target.value)} maxLength={80} required placeholder="IUB-2026-XXXXXXXX" /></label>
         <button className="button button-primary" type="submit" disabled={busy}>{busy ? "Consultando…" : "Consultar"}</button>
       </form>
 

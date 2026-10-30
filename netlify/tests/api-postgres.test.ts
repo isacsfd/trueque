@@ -245,7 +245,7 @@ describe.skipIf(!databaseUrl)("API + PostgreSQL full lifecycle", () => {
     for (const next of [
       { action: "request.review", requestId },
       { action: "request.approve", requestId, reason: "Aprobación de prueba API PostgreSQL" },
-      { action: "exchange.plan", requestId, receiptCode: `REC-${runId}`, planningKey: crypto.randomUUID() },
+      { action: "exchange.plan", requestId, scheduledAt: new Date().toISOString(), planningKey: crypto.randomUUID() },
     ]) {
       const response = await action(managerCookie, next);
       expect(response.status).toBe(200);
@@ -285,11 +285,6 @@ describe.skipIf(!databaseUrl)("API + PostgreSQL full lifecycle", () => {
     expect(statsBody.inventory.totalCopies).toBe(copyCount.rows[0].count);
     expect(Object.values(statsBody.requests as Record<string, number>).reduce((total, value) => total + Number(value), 0)).toBe(requestCount.rows[0].count);
     expect(statsBody.trends.requests.length).toBeGreaterThan(0);
-
-    const dropoff = await action(managerCookie, {
-      action: "delivery.schedule", exchangeId: item.exchangeId, deliveryType: "offered_book_dropoff",
-    });
-    expect(dropoff.status).toBe(200);
 
     workbench = await (await workbenchHandler(await jsonRequest("https://example.test/api/admin/workbench", "GET", undefined, managerCookie))).json();
     item = workbench.items.find((candidate: { requestCode: string }) => candidate.requestCode === requestCode);
@@ -389,7 +384,7 @@ describe.skipIf(!databaseUrl)("API + PostgreSQL full lifecycle", () => {
     for (const next of [
       { action: "request.review", requestId: created.requestId },
       { action: "request.approve", requestId: created.requestId, reason: "Aprobación de prueba API PostgreSQL" },
-      { action: "exchange.plan", requestId: created.requestId, receiptCode: `REC-CANCEL-${runId}`, planningKey: crypto.randomUUID() },
+      { action: "exchange.plan", requestId: created.requestId, scheduledAt: new Date().toISOString(), planningKey: crypto.randomUUID() },
     ]) {
       expect((await action(managerCookie, next)).status).toBe(200);
     }
@@ -398,9 +393,6 @@ describe.skipIf(!databaseUrl)("API + PostgreSQL full lifecycle", () => {
     let item = workbench.items.find((candidate: { requestCode: string }) => candidate.requestCode === cancelRequestCode);
     expect(item).toBeTruthy();
 
-    expect((await action(managerCookie, {
-      action: "delivery.schedule", exchangeId: item.exchangeId, deliveryType: "offered_book_dropoff",
-    })).status).toBe(200);
     workbench = await (await workbenchHandler(await jsonRequest("https://example.test/api/admin/workbench", "GET", undefined, managerCookie))).json();
     item = workbench.items.find((candidate: { requestCode: string }) => candidate.requestCode === cancelRequestCode);
     const dropoff = item.deliveries.find((delivery: { type: string }) => delivery.type === "offered_book_dropoff");

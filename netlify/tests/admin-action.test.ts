@@ -44,6 +44,73 @@ describe("admin action API", () => {
     );
   });
 
+  it("plans an exchange without a manual receipt code and sends the proposed date", async () => {
+    vi.mocked(requireAdmin).mockReturnValue({ username: "admin", actorUserId: 7, expiresAt: 9999999999 });
+    vi.mocked(queryAdmin).mockResolvedValue([{
+      exchange_id: "10",
+      reception_id: "20",
+      delivery_id: "30",
+      scheduled_at: "2026-10-30T17:00:00.000Z",
+    }]);
+    const planningKey = "11111111-1111-4111-8111-111111111111";
+
+    const response = await handler(createRequest({
+      action: "exchange.plan",
+      requestId: 42,
+      scheduledAt: "2026-10-30T17:00:00.000Z",
+      planningKey,
+    }));
+
+    expect(response.status).toBe(200);
+    expect(queryAdmin).toHaveBeenCalledWith(
+      expect.stringContaining("plan_exchange_with_dropoff"),
+      [42, "2026-10-30T17:00:00.000Z", planningKey, 7],
+    );
+    expect(JSON.stringify(vi.mocked(queryAdmin).mock.calls[0]?.[1])).not.toContain("receiptCode");
+  });
+
+  it("plans with the database default date when no proposed date is sent", async () => {
+    vi.mocked(requireAdmin).mockReturnValue({ username: "admin", actorUserId: 7, expiresAt: 9999999999 });
+    vi.mocked(queryAdmin).mockResolvedValue([{
+      exchange_id: "10",
+      reception_id: "20",
+      delivery_id: "30",
+      scheduled_at: "2026-10-30T17:00:00.000Z",
+    }]);
+    const planningKey = "11111111-1111-4111-8111-111111111111";
+
+    const response = await handler(createRequest({
+      action: "exchange.plan",
+      requestId: 42,
+      planningKey,
+    }));
+
+    expect(response.status).toBe(200);
+    expect(queryAdmin).toHaveBeenCalledWith(
+      expect.stringContaining("plan_exchange_with_dropoff"),
+      [42, null, planningKey, 7],
+    );
+  });
+
+  it("normalizes a date-only proposed date to noon in Colombia", async () => {
+    vi.mocked(requireAdmin).mockReturnValue({ username: "admin", actorUserId: 7, expiresAt: 9999999999 });
+    vi.mocked(queryAdmin).mockResolvedValue([{ exchange_id: "10" }]);
+    const planningKey = "11111111-1111-4111-8111-111111111111";
+
+    const response = await handler(createRequest({
+      action: "exchange.plan",
+      requestId: 42,
+      scheduledAt: "2026-10-30",
+      planningKey,
+    }));
+
+    expect(response.status).toBe(200);
+    expect(queryAdmin).toHaveBeenCalledWith(
+      expect.stringContaining("plan_exchange_with_dropoff"),
+      [42, "2026-10-30T12:00:00-05:00", planningKey, 7],
+    );
+  });
+
   it("approves without a reason and requires one only for rejection", async () => {
     vi.mocked(requireAdmin).mockReturnValue({ username: "admin", actorUserId: 7, expiresAt: 9999999999 });
     vi.mocked(queryAdmin).mockResolvedValue([{ set_request_status: null }]);
