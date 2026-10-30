@@ -12,6 +12,7 @@ const migrationNames = [
   "0014_admin_runtime_grants.sql",
   "0015_release_expired_reservations.sql",
   "0016_reservation_lifecycle.sql",
+  "0017_public_request_status.sql",
 ];
 
 let sequence = 0;
@@ -444,6 +445,37 @@ describe("reservation lifecycle", () => {
       reservation_status: "active",
       copy_availability: "reserved",
     });
+  });
+
+  it("returns a safe public status by code without participant data", async () => {
+    const request = await createRequest(copyIds[0]!, 150);
+    const row = await database.query<{
+      request_code: string;
+      status: string;
+      requested_title: string;
+      requested_inventory_code: string;
+      offered_title: string;
+      reservation_status: string;
+    }>(
+      `SELECT * FROM public.get_public_request_status($1)`,
+      [request.code.toLowerCase()],
+    );
+    expect(row.rows[0]).toMatchObject({
+      request_code: request.code,
+      status: "pending",
+      requested_title: "QA Reservation Book",
+      requested_inventory_code: "QA-RES-1",
+      offered_title: "QA Offered 150",
+      reservation_status: "active",
+    });
+    expect(Object.keys(row.rows[0]!)).not.toEqual(
+      expect.arrayContaining(["full_name", "email", "participant_id", "identity_ciphertext"]),
+    );
+
+    const missing = await database.query(
+      `SELECT * FROM public.get_public_request_status('IUB-2026-FFFFFFFF')`,
+    );
+    expect(missing.rows).toHaveLength(0);
   });
 
   it("records reservation audit events and exposes no personal data in the public catalogue", async () => {

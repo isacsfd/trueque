@@ -83,7 +83,10 @@ export function generateAccessToken(): string {
 }
 
 export function generateRequestCode(): string {
-  return `IUB-${new Date().getUTCFullYear()}-${randomBytes(4).toString("hex").toUpperCase()}`;
+  // The code is also the public lookup credential. Keep the existing
+  // IUB-YYYY-<hex> shape, but use eight random bytes (64 bits) for new codes.
+  // Existing shorter codes remain valid and queryable.
+  return `IUB-${new Date().getUTCFullYear()}-${randomBytes(8).toString("hex").toUpperCase()}`;
 }
 
 export function newIdempotencyKey(): string {

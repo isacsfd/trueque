@@ -121,32 +121,65 @@ describe("participant request API", () => {
     expect(await response.text()).toContain("privacy_notice_unavailable");
   });
 
-  it("looks up a request only with the correct opaque token", async () => {
+  it("looks up a request by code without a password or access token", async () => {
     vi.mocked(query).mockResolvedValue([
       {
         request_code: "IUB-2026-ABCD1234",
-        status: "cancellation_pending",
+        status: "under_review",
         created_at: "2026-10-28T20:00:00Z",
-        copy_title: "Libro institucional",
-        exchange_status: "cancellation_pending",
-        reception_status: "return_pending",
-        return_required: true,
-        return_confirmed: false,
+        offered_title: "Libro ofrecido",
+        offered_author: "Autora",
+        requested_title: "Libro institucional",
+        requested_author: "Autora institucional",
+        requested_inventory_code: "INV-001",
+        reservation_status: "active",
+        reservation_expires_at: "2026-10-28T21:00:00Z",
+        exchange_status: null,
+        exchange_completed_at: null,
+        reception_status: null,
       },
     ]);
-    const token = "token-with-more-than-thirty-two-characters-123";
     const request = new Request("https://example.test/api/requests/status", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ code: "IUB-2026-ABCD1234", token }),
+      body: JSON.stringify({ code: "iub-2026-abcd1234" }),
     });
     const response = await statusHandler(request);
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({
-      status: "cancellation_pending",
-      returnRequired: true,
-      returnConfirmed: false,
+      requestCode: "IUB-2026-ABCD1234",
+      status: "under_review",
+      requestedTitle: "Libro institucional",
+      offeredTitle: "Libro ofrecido",
+      reservationStatus: "active",
     });
-    expect(vi.mocked(query).mock.calls[0]?.[0]).toContain("get_request_status");
+    expect(vi.mocked(query).mock.calls[0]?.[0]).toContain("get_public_request_status");
+    expect(vi.mocked(query).mock.calls[0]?.[1]).toEqual(["IUB-2026-ABCD1234"]);
+  });
+
+  it("returns the generic not-found message for an unknown code", async () => {
+    vi.mocked(query).mockResolvedValue([]);
+    const request = new Request("https://example.test/api/requests/status", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code: "IUB-2026-FFFFFFFF" }),
+    });
+    const response = await statusHandler(request);
+    expect(response.status).toBe(404);
+    const body = await response.json() as { error: { message: string } };
+    expect(body.error.message).toBe(
+      "No encontramos una solicitud con ese código. Verifica los datos e inténtalo nuevamente.",
+    );
+  });
+
+  it("rejects a malformed code without querying the database", async () => {
+    const request = new Request("https://example.test/api/requests/status", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code: "ABC" }),
+    });
+    const response = await statusHandler(request);
+    expect(response.status).toBe(400);
+    expect(vi.mocked(query)).not.toHaveBeenCalled();
   });
 });

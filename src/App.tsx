@@ -29,7 +29,6 @@ function App() {
   const [view, setView] = useState<View>("catalog");
   const [selected, setSelected] = useState<CatalogItem | null>(null);
   const [requestCode, setRequestCode] = useState("");
-  const [requestAccessToken, setRequestAccessToken] = useState("");
 
   return (
     <div className="site-shell">
@@ -76,14 +75,13 @@ function App() {
           <RequestForm
             selected={selected}
             onBack={() => setView("catalog")}
-            onCreated={({ requestCode: code, accessToken }) => {
+            onCreated={({ requestCode: code }) => {
               setRequestCode(code);
-              setRequestAccessToken(accessToken);
             }}
           />
         ) : null}
 
-        {view === "status" ? <MyRequest initialCode={requestCode} initialToken={requestAccessToken} /> : null}
+        {view === "status" ? <MyRequest initialCode={requestCode} /> : null}
         {view === "admin" ? <AdminPanel /> : null}
 
         {view === "catalog" ? (

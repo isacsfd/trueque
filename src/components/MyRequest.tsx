@@ -6,7 +6,6 @@ import { PhotoFollowUp } from "./PhotoFollowUp";
 
 interface StoredRequest {
   requestCode: string;
-  accessToken: string;
 }
 
 function readStored(): StoredRequest | null {
@@ -14,8 +13,8 @@ function readStored(): StoredRequest | null {
     const raw = sessionStorage.getItem("iub:participant-request");
     if (!raw) return null;
     const parsed = JSON.parse(raw) as Partial<StoredRequest>;
-    if (typeof parsed.requestCode === "string" && typeof parsed.accessToken === "string") {
-      return { requestCode: parsed.requestCode, accessToken: parsed.accessToken };
+    if (typeof parsed.requestCode === "string") {
+      return { requestCode: parsed.requestCode };
     }
   } catch {
     return null;
@@ -23,19 +22,18 @@ function readStored(): StoredRequest | null {
   return null;
 }
 
-export function MyRequest({ initialCode, initialToken }: { initialCode?: string; initialToken?: string }) {
+export function MyRequest({ initialCode }: { initialCode?: string }) {
   const stored = readStored();
   const [code, setCode] = useState(stored?.requestCode ?? initialCode ?? "");
-  const [token, setToken] = useState(stored?.accessToken ?? initialToken ?? "");
   const [status, setStatus] = useState<RequestStatusView | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  async function lookup(requestCode = code, accessToken = token) {
+  async function lookup(requestCode = code) {
     setBusy(true);
     setError(null);
     try {
-      const result = await fetchRequestStatus({ requestCode, accessToken });
+      const result = await fetchRequestStatus({ requestCode });
       setStatus(result);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "No se pudo consultar la solicitud.");
@@ -48,7 +46,7 @@ export function MyRequest({ initialCode, initialToken }: { initialCode?: string;
   useEffect(() => {
     if (stored) {
       queueMicrotask(() => {
-        void lookup(stored.requestCode, stored.accessToken);
+        void lookup(stored.requestCode);
       });
     }
     // Only the initial stored request is auto-queried.
@@ -56,7 +54,7 @@ export function MyRequest({ initialCode, initialToken }: { initialCode?: string;
   }, []);
 
   const explanation = status
-    ? cancellationExplanation(status.status, status.returnRequired, status.returnConfirmed)
+    ? cancellationExplanation(status.status, Boolean(status.returnRequired), Boolean(status.returnConfirmed))
     : null;
 
   return (
@@ -75,8 +73,7 @@ export function MyRequest({ initialCode, initialToken }: { initialCode?: string;
           void lookup();
         }}
       >
-        <label>Código de solicitud<input value={code} onChange={(event) => setCode(event.target.value)} maxLength={80} required /></label>
-        <label>Clave de acceso<input value={token} onChange={(event) => setToken(event.target.value)} type="password" maxLength={200} required autoComplete="off" /></label>
+        <label>Código de solicitud<input value={code} onChange={(event) => setCode(event.target.value)} maxLength={80} required placeholder="IUB-2026-XXXXXXXX" /></label>
         <button className="button button-primary" type="submit" disabled={busy}>{busy ? "Consultando…" : "Consultar"}</button>
       </form>
 
@@ -92,10 +89,13 @@ export function MyRequest({ initialCode, initialToken }: { initialCode?: string;
             <span className={`status-pill status-${status.status}`}>{requestStatusLabel(status.status)}</span>
           </header>
           <dl className="status-grid">
-            <div><dt>Ejemplar solicitado</dt><dd>{status.copyTitle}</dd></div>
+            <div><dt>Libro solicitado</dt><dd>{status.requestedTitle || status.copyTitle} {status.requestedInventoryCode ? `· ${status.requestedInventoryCode}` : ""}</dd></div>
+            <div><dt>Libro ofrecido</dt><dd>{status.offeredTitle ? `${status.offeredTitle}${status.offeredAuthor ? ` · ${status.offeredAuthor}` : ""}` : "No registrado"}</dd></div>
+            <div><dt>Reserva</dt><dd>{status.reservationLabel || "Sin reserva"}</dd></div>
             <div><dt>Intercambio</dt><dd>{exchangeStatusLabel(status.exchangeStatus)}</dd></div>
             <div><dt>Recepción del libro ofrecido</dt><dd>{receptionStatusLabel(status.receptionStatus)}</dd></div>
           </dl>
+          {status.nextStep ? <div className="notice notice-success">{status.nextStep}</div> : null}
           {explanation ? <div className="notice notice-warning">{explanation}</div> : null}
           {status.status === "cancelled" ? (
             <div className="notice notice-success">La solicitud está cancelada. Si había un libro en custodia, la devolución quedó registrada.</div>

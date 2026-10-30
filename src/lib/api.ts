@@ -106,11 +106,10 @@ export function reserveCopy(input: {
 
 export function fetchRequestStatus(input: {
   requestCode: string;
-  accessToken: string;
 }): Promise<RequestStatusView> {
   return request<RequestStatusView>("/api/requests/status", {
     method: "POST",
-    body: JSON.stringify({ code: input.requestCode, token: input.accessToken }),
+    body: JSON.stringify({ code: input.requestCode }),
   });
 }
 

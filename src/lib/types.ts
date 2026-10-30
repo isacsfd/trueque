@@ -155,10 +155,20 @@ export interface RequestStatusView {
   status: RequestStatus;
   createdAt: string;
   copyTitle: string;
+  requestedTitle?: string;
+  requestedAuthor?: string | null;
+  requestedInventoryCode?: string | null;
+  offeredTitle?: string | null;
+  offeredAuthor?: string | null;
+  reservationStatus?: string | null;
+  reservationLabel?: string;
+  reservationExpiresAt?: string | null;
   exchangeStatus: ExchangeStatus | null;
+  exchangeCompletedAt?: string | null;
   receptionStatus: ReceptionStatus | null;
-  returnRequired: boolean;
-  returnConfirmed: boolean;
+  returnRequired?: boolean;
+  returnConfirmed?: boolean;
+  nextStep?: string;
 }
 
 export interface CreateRequestResponse {
