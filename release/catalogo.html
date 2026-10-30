@@ -106,4 +106,24 @@ main{padding:24px}p.lead{max-width:900px}.notice{background:#fffaf0;border-left:
 const q=document.getElementById('q'),src=document.getElementById('source'),dup=document.getElementById('dup'),rows=[...document.querySelectorAll('#rows tr')],count=document.getElementById('count');
 function filter(){const t=q.value.toLowerCase(),s=src.value,d=dup.value;let n=0;for(const r of rows){const ok=(!t||r.dataset.search.includes(t))&&(!s||r.dataset.source===s)&&(!d||r.dataset.dup===d);r.hidden=!ok;if(ok)n++;}count.textContent=n+' ejemplares visibles';}
 q.addEventListener('input',filter);src.addEventListener('change',filter);dup.addEventListener('change',filter);filter();
+async function syncAvailability(){
+  try{
+    const response=await fetch('/api/catalog',{cache:'no-store',headers:{Accept:'application/json'}});
+    if(!response.ok) return;
+    const data=await response.json();
+    const available=new Set((data.items||[]).map(item=>String(item.inventoryCode||'')));
+    let removed=0;
+    for(const row of rows){
+      const code=row.querySelector('td.code')?.textContent.trim()||'';
+      if(code && !available.has(code)){row.remove();removed++;}
+    }
+    const notice=document.querySelector('.notice');
+    if(notice){
+      notice.innerHTML='<strong>'+available.size+' ejemplares disponibles.</strong> Los grupos con más de un ejemplar se conservan: cada fila es un ejemplar físico adicional y no un error de duplicado. La disponibilidad se actualiza en línea; los ejemplares reservados o asignados no se muestran.';
+    }
+    rows.length=0;rows.push(...document.querySelectorAll('#rows tr'));
+    filter();
+  }catch{}
+}
+syncAvailability();
 </script></body></html>

@@ -21,6 +21,11 @@ interface WorkbenchRow {
   requested_availability: string | null;
   requested_condition: string | null;
   requested_location: string | null;
+  reservation_id: string | null;
+  reservation_status: string | null;
+  reservation_created_at: string | null;
+  reservation_expires_at: string | null;
+  reservation_released_at: string | null;
   offered_title: string | null;
   offered_author: string | null;
   offered_isbn: string | null;
@@ -106,6 +111,11 @@ const requestSelect = `
     c.availability AS requested_availability,
     c.physical_condition AS requested_condition,
     c.location AS requested_location,
+    res.id AS reservation_id,
+    res.status AS reservation_status,
+    res.created_at AS reservation_created_at,
+    res.expires_at AS reservation_expires_at,
+    res.released_at AS reservation_released_at,
     ob.title AS offered_title,
     ob.author AS offered_author,
     ob.isbn AS offered_isbn,
@@ -207,6 +217,13 @@ ${submissionEvidence(modern)}
   LEFT JOIN public.publishers rp ON rp.id = b.publisher_id
   LEFT JOIN public.genres rg ON rg.id = b.genre_id
   LEFT JOIN public.offered_books ob ON ob.request_id = r.id
+  LEFT JOIN LATERAL (
+    SELECT rv.id, rv.status, rv.created_at, rv.expires_at, rv.released_at
+    FROM public.reservations rv
+    WHERE rv.request_id = r.id AND rv.copy_id = r.requested_copy_id
+    ORDER BY rv.id DESC
+    LIMIT 1
+  ) res ON TRUE
 ${submissionJoins(modern)}
   LEFT JOIN public.exchanges e ON e.request_id = r.id
   LEFT JOIN public.receptions rec ON rec.id = e.offered_reception_id
@@ -406,6 +423,13 @@ export default async function handler(request: Request): Promise<Response> {
             physicalCondition: row.requested_condition,
             location: row.requested_location,
             selectedAt: row.created_at,
+          },
+          reservation: {
+            id: row.reservation_id,
+            status: row.reservation_status,
+            createdAt: row.reservation_created_at,
+            expiresAt: row.reservation_expires_at,
+            releasedAt: row.reservation_released_at,
           },
           dataStatus: {
             complete: missing.length === 0,

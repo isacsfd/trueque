@@ -169,6 +169,20 @@ export function mapError(error: unknown): Response {
             message: "Falta un paso previo, como confirmar la devolución física.",
           },
         });
+      case "P0004":
+        return json(409, {
+          error: {
+            code: "reservation_unavailable",
+            message: "La reserva del ejemplar venció o no está vigente. No se puede aprobar; rechaza la solicitud o pide al estudiante elegir otro ejemplar.",
+          },
+        });
+      case "P0005":
+        return json(409, {
+          error: {
+            code: "copy_unavailable",
+            message: "Este ejemplar ya no está disponible. Puedes elegir otro libro del catálogo.",
+          },
+        });
       case "22023":
       case "22P02":
         return json(400, {

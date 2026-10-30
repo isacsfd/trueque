@@ -307,7 +307,7 @@ export function RequestForm({ selected, onBack, onCreated }: RequestFormProps) {
           </div>
         </div>
         <div className="notice notice-success" role="status">
-          <p>Tu solicitud <strong>{created.requestCode}</strong> fue registrada.</p>
+          <p>Tu solicitud <strong>{created.requestCode}</strong> fue registrada. El ejemplar está temporalmente reservado mientras se revisa tu solicitud.</p>
           <p>Conserva este código. El acceso a tu solicitud quedó guardado en este navegador; si lo pierdes, contacta al equipo institucional.</p>
           <p>La revisión de fotografías es manual. La preaprobación no significa que el libro ya haya sido aceptado ni habilitado.</p>
         </div>

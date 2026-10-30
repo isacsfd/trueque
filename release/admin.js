@@ -53,6 +53,12 @@ const AVAILABILITY_LABEL = {
   retired: "Retirado",
   exchange_out: "Entregado en intercambio",
 };
+const RESERVATION_STATUS = {
+  active: "Reservado temporalmente",
+  converted: "Asignado / comprometido",
+  expired: "Reserva vencida",
+  released: "Reserva liberada",
+};
 
 const state = {
   session: null,
@@ -93,6 +99,20 @@ function fmt(value) {
   if (!value) return "—";
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? "—" : date.toLocaleString("es-CO");
+}
+
+function elapsedLabel(value) {
+  if (!value) return "—";
+  const start = new Date(value).getTime();
+  if (Number.isNaN(start)) return "—";
+  const seconds = Math.max(0, Math.round((Date.now() - start) / 1000));
+  if (seconds < 60) return `${seconds} s`;
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  const remaining = minutes % 60;
+  if (hours < 24) return `${hours} h ${remaining} min`;
+  return `${Math.floor(hours / 24)} d ${hours % 24} h`;
 }
 
 function valueOr(value, fallback = "No registrado") {
@@ -294,6 +314,7 @@ function renderRequests() {
     const student = item.student || {};
     const offered = item.offeredBook || {};
     const requested = item.requestedBook || {};
+    const reservation = item.reservation || {};
     const missing = (item.dataStatus && item.dataStatus.missing) || [];
     const studentName = student.fullName
       || (student.restricted ? "No disponible por permisos" : "No registrado");
@@ -345,6 +366,11 @@ function renderRequests() {
             <strong>${esc(fmt(item.createdAt))}</strong>
             <div class="sub">${esc(item.requestedInventoryCode ? `Ejemplar solicitado ${item.requestedInventoryCode}` : "Sin código de ejemplar")}</div>
           </div>
+          <div class="summary-box">
+            <span class="k">Reserva del ejemplar</span>
+            <strong>${esc(reservation.status ? statusLabel(RESERVATION_STATUS, reservation.status) : "Sin reserva registrada")}</strong>
+            <div class="sub">${reservation.createdAt ? `Desde ${esc(fmt(reservation.createdAt))} · ${esc(elapsedLabel(reservation.createdAt))}` : "Sin fecha de reserva"}</div>
+          </div>
         </div>
 
         <details class="request-detail">
@@ -393,6 +419,10 @@ function renderRequests() {
                 ${detailRow("Condición física", requested.physicalCondition ? statusLabel(CONDITION_LABEL, requested.physicalCondition) : null)}
                 ${detailRow("Ubicación", requested.location)}
                 ${detailRow("Fecha de selección", fmt(requested.selectedAt || item.createdAt), "No registrada")}
+                ${detailRow("Reserva", reservation.status ? statusLabel(RESERVATION_STATUS, reservation.status) : "Sin reserva registrada")}
+                ${detailRow("Reservado desde", fmt(reservation.createdAt), "No registrado")}
+                ${detailRow("Vence", fmt(reservation.expiresAt), "No registrado")}
+                ${detailRow("Tiempo transcurrido", elapsedLabel(reservation.createdAt), "No registrado")}
               </dl>
             </section>
 
