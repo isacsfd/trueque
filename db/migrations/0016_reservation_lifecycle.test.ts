@@ -237,6 +237,24 @@ describe("reservation lifecycle", () => {
     });
   });
 
+  it("returns the same hold when the public form retries reservation with a new key", async () => {
+    const request = await createRequest(copyIds[0]!, 140);
+    const first = await database.query<{ reservation_id: string; expires_at: string }>(
+      `SELECT * FROM public.reserve_copy($1, $2, decode($3,'hex'), $4)`,
+      [copyIds[0], request.id, hex(145), uuid()],
+    );
+    const second = await database.query<{ reservation_id: string; expires_at: string }>(
+      `SELECT * FROM public.reserve_copy($1, $2, decode($3,'hex'), $4)`,
+      [copyIds[0], request.id, hex(145), uuid()],
+    );
+    expect(second.rows[0]!.reservation_id).toBe(first.rows[0]!.reservation_id);
+    const count = await database.query<{ n: number }>(
+      `SELECT count(*)::int AS n FROM public.reservations WHERE request_id = $1`,
+      [request.id],
+    );
+    expect(count.rows[0]!.n).toBe(1);
+  });
+
   it("handles two parallel request attempts for the same copy with one winner", async () => {
     const results = await Promise.allSettled([
       createRequest(copyIds[0]!, 120),
