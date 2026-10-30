@@ -76,15 +76,17 @@ La rama `qa-reservas-20261030` fue eliminada.
 
 Antes de la reparación, la solicitud real `IUB-2026-0E04340C` estaba aprobada pero su reserva había vencido y `INV-063` había vuelto a `available`. Se aplicó la reparación guardada y auditada, sin recrear el ejemplar.
 
+El propietario aclaró después que esa solicitud era una **prueba manual**. Se canceló con motivo auditado `Prueba manual: se libera el ejemplar INV-063`; la reserva pasó a `released` y el ejemplar volvió a `available`, sin borrar la solicitud ni el ejemplar.
+
 Estado final:
 
 - 87 ejemplares totales.
 - 84 ejemplares reales `INV-*` / `CH-*`.
-- 83 disponibles.
-- 1 reservado: `INV-063`, por `IUB-2026-0E04340C`.
+- 84 disponibles.
+- 0 reservados.
 - 3 ejemplares sintéticos `IUB-STG-*` no disponibles.
 - Ningún ejemplar real fue eliminado ni recreado.
-- La solicitud conserva su ID, código, estudiante y ejemplar.
+- La solicitud conserva su ID, código, estudiante y ejemplar; queda `cancelled` con el motivo registrado.
 
 Auditoría registrada:
 
@@ -94,6 +96,13 @@ request_code = IUB-2026-0E04340C
 inventory_code = INV-063
 previous_reservation_status = expired
 new_reservation_status = converted
+
+request.status_changed
+from = approved
+to = cancelled
+reason = Prueba manual: se libera el ejemplar INV-063
+reservation_id = 3
+copy_id = 5
 ```
 
 ## Auditoría de solicitudes QA anteriores
@@ -105,10 +114,10 @@ Ninguna de las dos está vinculada a ejemplares `INV-*` o `CH-*`. No se modifica
 
 ## Verificación del sitio publicado
 
-- `/api/catalog`: 83 elementos, sin `INV-063`, sin datos personales.
-- `/catalogo`: 83 filas visibles; `INV-063` no aparece.
-- `/admin`: 200; solicitud `IUB-2026-0E04340C` muestra reserva **Asignado / comprometido**, ejemplar **Reservado** y no ofrece acciones de aprobación/rechazo.
-- Aprobar de nuevo la solicitud aprobada: idempotente, 200, sin cambio de estado.
+- `/api/catalog`: 84 elementos, incluido `INV-063`, sin datos personales.
+- `/catalogo`: 84 filas visibles; `INV-063` vuelve a aparecer.
+- `/admin`: 200; solicitud `IUB-2026-0E04340C` aparece **Cancelada**, reserva **Reserva liberada**, ejemplar **Disponible**.
+- La solicitud conserva el historial de aprobación y la cancelación posterior con motivo.
 - Rechazar sin motivo: 400 `reason_required`.
 - Build y TypeScript: correctos.
 - Suite completa: **200 pruebas aprobadas**, 7 omitidas.
