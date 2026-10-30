@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import {
   fetchAdminWorkbench,
   getAdminSession,
+  issueLookupToken,
   loginAdmin,
   logoutAdmin,
   runAdminAction,
@@ -145,6 +146,21 @@ export function AdminPanel() {
     }
   }
 
+  async function issueToken(item: AdminWorkbenchItem) {
+    if (!window.confirm(`¿Emitir un token de consulta para ${item.requestCode}? El token se mostrará una sola vez.`)) return;
+    setBusyRequestId(item.requestId);
+    setError(null);
+    try {
+      const result = await issueLookupToken(item.requestId);
+      window.prompt("Token de consulta (entregar al estudiante):", result.token);
+    } catch (reason) {
+      if (errorStatus(reason) === 401) setSession(null);
+      setError(adminErrorMessage(reason));
+    } finally {
+      setBusyRequestId(null);
+    }
+  }
+
   const visibleItems = requestFilter === "all"
     ? items
     : items.filter((item) => item.requestStatus === requestFilter);
@@ -223,6 +239,7 @@ export function AdminPanel() {
                 now={now}
                 busy={busyRequestId === item.requestId}
                 onAction={(body) => act(item, body)}
+                onIssueToken={() => issueToken(item)}
               />
             ))}
           </div>
@@ -341,11 +358,13 @@ function AdminRequestCard({
   now,
   busy,
   onAction,
+  onIssueToken,
 }: {
   item: AdminWorkbenchItem;
   now: Date;
   busy: boolean;
   onAction: (body: Omit<AdminActionBody, "idempotencyKey"> & { idempotencyKey?: string }) => Promise<void>;
+  onIssueToken: () => void;
 }) {
   const dropoff = item.deliveries.find((delivery) => delivery.type === "offered_book_dropoff");
   const handover = item.deliveries.find((delivery) => delivery.type === "institutional_copy_handover");
@@ -683,6 +702,12 @@ function AdminRequestCard({
             })}
           />
         ) : null}
+        <ActionButton
+          label="Emitir token de consulta"
+          variant="secondary"
+          onClick={onIssueToken}
+          busy={busy}
+        />
         {item.exchangeStatus === "planned" || item.exchangeStatus === "in_process" ? (
           <ActionButton
             label="Cancelar intercambio"

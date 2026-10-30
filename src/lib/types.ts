@@ -187,6 +187,7 @@ export type AdminActionName =
   | "request.review"
   | "request.approve"
   | "request.reject"
+  | "request.issue_lookup_token"
   | "submission.review"
   | "exchange.plan"
   | "delivery.schedule"
@@ -211,6 +212,7 @@ export interface AdminActionBody {
   submissionId?: string;
   reviewAction?: "start_review" | "request_information" | "preapprove" | "reject";
   notes?: string;
+  label?: string;
   planningKey?: string;
   exchangeId?: string;
   deliveryType?: DeliveryType;

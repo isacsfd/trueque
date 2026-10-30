@@ -2,10 +2,10 @@ import { useEffect, useState } from "react";
 import { fetchRequestStatus } from "../lib/api";
 import { cancellationExplanation, exchangeStatusLabel, receptionStatusLabel, requestStatusLabel } from "../lib/status";
 import type { RequestStatusView } from "../lib/types";
-import { PhotoFollowUp } from "./PhotoFollowUp";
 
 interface StoredRequest {
   requestCode: string;
+  accessToken: string;
 }
 
 function readStored(): StoredRequest | null {
@@ -13,8 +13,11 @@ function readStored(): StoredRequest | null {
     const raw = sessionStorage.getItem("iub:participant-request");
     if (!raw) return null;
     const parsed = JSON.parse(raw) as Partial<StoredRequest>;
-    if (typeof parsed.requestCode === "string") {
-      return { requestCode: parsed.requestCode };
+    if (typeof parsed.accessToken === "string") {
+      return {
+        requestCode: typeof parsed.requestCode === "string" ? parsed.requestCode : "",
+        accessToken: parsed.accessToken,
+      };
     }
   } catch {
     return null;
@@ -22,18 +25,18 @@ function readStored(): StoredRequest | null {
   return null;
 }
 
-export function MyRequest({ initialCode }: { initialCode?: string }) {
+export function MyRequest({ initialToken }: { initialToken?: string }) {
   const stored = readStored();
-  const [code, setCode] = useState(stored?.requestCode ?? initialCode ?? "");
+  const [token, setToken] = useState(stored?.accessToken ?? initialToken ?? "");
   const [status, setStatus] = useState<RequestStatusView | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  async function lookup(requestCode = code) {
+  async function lookup(accessToken = token) {
     setBusy(true);
     setError(null);
     try {
-      const result = await fetchRequestStatus({ requestCode });
+      const result = await fetchRequestStatus({ token: accessToken });
       setStatus(result);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "No se pudo consultar la solicitud.");
@@ -46,10 +49,10 @@ export function MyRequest({ initialCode }: { initialCode?: string }) {
   useEffect(() => {
     if (stored) {
       queueMicrotask(() => {
-        void lookup(stored.requestCode);
+        void lookup(stored.accessToken);
       });
     }
-    // Only the initial stored request is auto-queried.
+    // Only the initial stored token is auto-queried.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -73,8 +76,21 @@ export function MyRequest({ initialCode }: { initialCode?: string }) {
           void lookup();
         }}
       >
-        <label>Código de solicitud o reserva<input value={code} onChange={(event) => setCode(event.target.value)} maxLength={80} required placeholder="IUB-2026-XXXXXXXX" /></label>
-        <button className="button button-primary" type="submit" disabled={busy}>{busy ? "Consultando…" : "Consultar"}</button>
+        <label>
+          Código de solicitud o reserva
+          <input
+            value={token}
+            onChange={(event) => setToken(event.target.value)}
+            maxLength={200}
+            required
+            placeholder="Token de consulta"
+            autoComplete="off"
+          />
+        </label>
+        <p className="field-help">Usa el código o token que recibiste al registrar tu solicitud.</p>
+        <button className="button button-primary" type="submit" disabled={busy}>
+          {busy ? "Consultando…" : "Consultar"}
+        </button>
       </form>
 
       {error ? <div className="notice notice-error" role="alert">{error}</div> : null}
@@ -102,7 +118,6 @@ export function MyRequest({ initialCode }: { initialCode?: string }) {
           ) : null}
         </article>
       ) : null}
-      <PhotoFollowUp />
     </section>
   );
 }

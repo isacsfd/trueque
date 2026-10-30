@@ -33,10 +33,11 @@ describe("consulta pública de estado", () => {
     vi.clearAllMocks();
   });
 
-  it("consulta únicamente con el código y no pide contraseña", async () => {
+  it("consulta únicamente con el token y no pide contraseña", async () => {
     vi.mocked(fetchRequestStatus).mockResolvedValue(status);
 
-    render(<MyRequest initialCode="IUB-2026-ABCD1234" />);
+    const token = "token-with-more-than-thirty-two-characters-123";
+    render(<MyRequest initialToken={token} />);
 
     expect(screen.getByLabelText("Código de solicitud o reserva")).toBeInTheDocument();
     expect(screen.queryByLabelText(/contraseña|clave de acceso/i)).not.toBeInTheDocument();
@@ -45,7 +46,7 @@ describe("consulta pública de estado", () => {
     fireEvent.click(screen.getByRole("button", { name: "Consultar" }));
 
     await waitFor(() => {
-      expect(fetchRequestStatus).toHaveBeenCalledWith({ requestCode: "IUB-2026-ABCD1234" });
+      expect(fetchRequestStatus).toHaveBeenCalledWith({ token });
     });
     expect(await screen.findByText("Reservado temporalmente")).toBeInTheDocument();
     expect(screen.getAllByText(/Libro ofrecido/).length).toBeGreaterThan(0);

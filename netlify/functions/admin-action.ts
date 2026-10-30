@@ -1,7 +1,7 @@
 import { requireAdmin } from "../lib/auth.ts";
 import { assertActiveAdminActor } from "../lib/admin-identity.ts";
 import { queryAdmin } from "../lib/database.ts";
-import { normalizeIsbn } from "../lib/crypto.ts";
+import { normalizeIsbn, generateAccessToken, sha256 } from "../lib/crypto.ts";
 import {
   ApiError,
   assertSameOrigin,
@@ -20,6 +20,7 @@ const actions = [
   "request.review",
   "request.approve",
   "request.reject",
+  "request.issue_lookup_token",
   "submission.review",
   "exchange.plan",
   "delivery.schedule",
@@ -109,6 +110,18 @@ export default async function handler(request: Request): Promise<Response> {
         rows = await queryAdmin("SELECT public.set_request_status($1, 'rejected', $2, $3)", [
           requestId, actor, reason,
         ]);
+        break;
+      }
+      case "request.issue_lookup_token": {
+        const requestId = numberField(body, "requestId");
+        const label = optionalStringField(body, "label", 120);
+        const token = generateAccessToken();
+        const tokenHash = sha256(Buffer.from(token, "utf8"));
+        rows = await queryAdmin(
+          "SELECT public.issue_request_lookup_token($1, $2, $3, $4) AS token_id",
+          [requestId, tokenHash, actor, label],
+        );
+        if (rows[0]) rows[0] = { ...rows[0], token };
         break;
       }
       case "submission.review": {

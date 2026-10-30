@@ -111,6 +111,27 @@ describe("admin action API", () => {
     );
   });
 
+  it("issues a recoverable lookup token without storing it in plaintext", async () => {
+    vi.mocked(requireAdmin).mockReturnValue({ username: "admin", actorUserId: 7, expiresAt: 9999999999 });
+    vi.mocked(queryAdmin).mockResolvedValue([{ token_id: "5" }]);
+
+    const response = await handler(createRequest({
+      action: "request.issue_lookup_token",
+      requestId: 42,
+      label: "recuperación",
+    }));
+
+    expect(response.status).toBe(200);
+    const body = await response.json() as { result: { token: string; token_id: string } };
+    expect(body.result.token).toHaveLength(43);
+    expect(body.result.token_id).toBe("5");
+    expect(queryAdmin).toHaveBeenCalledWith(
+      expect.stringContaining("issue_request_lookup_token"),
+      [42, expect.any(Buffer), 7, "recuperación"],
+    );
+    expect(JSON.stringify(vi.mocked(queryAdmin).mock.calls[0]?.[1]?.slice(0, 3))).not.toContain(body.result.token);
+  });
+
   it("approves without a reason and requires one only for rejection", async () => {
     vi.mocked(requireAdmin).mockReturnValue({ username: "admin", actorUserId: 7, expiresAt: 9999999999 });
     vi.mocked(queryAdmin).mockResolvedValue([{ set_request_status: null }]);

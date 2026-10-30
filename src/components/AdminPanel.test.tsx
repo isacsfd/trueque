@@ -11,6 +11,7 @@ vi.mock("../lib/api", () => ({
   loginAdmin: vi.fn(),
   logoutAdmin: vi.fn(),
   runAdminAction: vi.fn(),
+  issueLookupToken: vi.fn(),
   fetchInventoryBatches: vi.fn(),
   inspectInventoryBatch: vi.fn(),
   prevalidateInventoryBatch: vi.fn(),

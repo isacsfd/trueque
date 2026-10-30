@@ -105,11 +105,11 @@ export function reserveCopy(input: {
 }
 
 export function fetchRequestStatus(input: {
-  requestCode: string;
+  token: string;
 }): Promise<RequestStatusView> {
   return request<RequestStatusView>("/api/requests/status", {
     method: "POST",
-    body: JSON.stringify({ code: input.requestCode }),
+    body: JSON.stringify({ token: input.token }),
   });
 }
 
@@ -404,4 +404,15 @@ export function runAdminAction(input: AdminActionBody & { action: AdminActionBod
     headers: { "X-IUB-Admin": "1" },
     body: JSON.stringify(input),
   });
+}
+
+export function issueLookupToken(
+  requestId: string,
+  label?: string,
+): Promise<{ token: string; token_id: string }> {
+  return request<{ result: { token: string; token_id: string } }>("/api/admin/action", {
+    method: "POST",
+    headers: { "X-IUB-Admin": "1" },
+    body: JSON.stringify({ action: "request.issue_lookup_token", requestId, label }),
+  }).then((result) => result.result);
 }

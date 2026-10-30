@@ -121,19 +121,68 @@ describe("participant request API", () => {
     expect(await response.text()).toContain("privacy_notice_unavailable");
   });
 
-  it("looks up a request only with the correct opaque token", async () => {
-    vi.mocked(query).mockResolvedValue([
-      {
-        request_code: "IUB-2026-ABCD1234",
-        status: "cancellation_pending",
-        created_at: "2026-10-28T20:00:00Z",
-        copy_title: "Libro institucional",
-        exchange_status: "cancellation_pending",
-        reception_status: "return_pending",
-        return_required: true,
-        return_confirmed: false,
-      },
-    ]);
+  it("looks up a request with a single opaque token and no second credential", async () => {
+    vi.mocked(query)
+      .mockResolvedValueOnce([{ allowed: true, retry_after_seconds: 0 }])
+      .mockResolvedValueOnce([{ allowed: true, retry_after_seconds: 0 }])
+      .mockResolvedValueOnce([
+        {
+          request_code: "IUB-2026-ABCD1234",
+          status: "under_review",
+          created_at: "2026-10-28T20:00:00Z",
+          offered_title: "Libro ofrecido",
+          offered_author: "Autora",
+          requested_title: "Libro institucional",
+          requested_author: "Autora institucional",
+          requested_inventory_code: "INV-001",
+          reservation_status: "active",
+          reservation_expires_at: "2026-10-28T21:00:00Z",
+          exchange_status: null,
+          exchange_completed_at: null,
+          reception_status: null,
+        },
+      ]);
+    const token = "token-with-more-than-thirty-two-characters-123";
+    const request = new Request("https://example.test/api/requests/status", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token }),
+    });
+    const response = await statusHandler(request);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      requestCode: "IUB-2026-ABCD1234",
+      status: "under_review",
+      reservationStatus: "active",
+      requestedTitle: "Libro institucional",
+    });
+    expect(vi.mocked(query).mock.calls[2]?.[0]).toContain("get_public_request_status_by_token");
+    const hash = vi.mocked(query).mock.calls[2]?.[1]?.[0];
+    expect(Buffer.isBuffer(hash)).toBe(true);
+    expect((hash as Buffer).length).toBe(32);
+  });
+
+  it("accepts old clients that still send code alongside token but ignores the code", async () => {
+    vi.mocked(query)
+      .mockResolvedValueOnce([{ allowed: true, retry_after_seconds: 0 }])
+      .mockResolvedValueOnce([{ allowed: true, retry_after_seconds: 0 }])
+      .mockResolvedValueOnce([
+        {
+          request_code: "IUB-2026-ABCD1234",
+          status: "approved",
+          created_at: "2026-10-28T20:00:00Z",
+          offered_title: "Libro ofrecido",
+          offered_author: "Autora",
+          requested_title: "Libro institucional",
+          requested_author: "Autora institucional",
+          requested_inventory_code: "INV-001",
+          reservation_status: "converted",
+          reservation_expires_at: null,
+          exchange_status: null,
+          exchange_completed_at: null,
+          reception_status: null,
+        },
+      ]);
     const token = "token-with-more-than-thirty-two-characters-123";
     const request = new Request("https://example.test/api/requests/status", {
       method: "POST",
@@ -142,11 +191,50 @@ describe("participant request API", () => {
     });
     const response = await statusHandler(request);
     expect(response.status).toBe(200);
-    expect(await response.json()).toMatchObject({
-      status: "cancellation_pending",
-      returnRequired: true,
-      returnConfirmed: false,
+    expect(vi.mocked(query).mock.calls[2]?.[1]?.[0]).toEqual(expect.any(Buffer));
+  });
+
+  it("returns the generic not-found message for an unknown token", async () => {
+    vi.mocked(query)
+      .mockResolvedValueOnce([{ allowed: true, retry_after_seconds: 0 }])
+      .mockResolvedValueOnce([{ allowed: true, retry_after_seconds: 0 }])
+      .mockResolvedValueOnce([]);
+    const request = new Request("https://example.test/api/requests/status", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token: "x".repeat(43) }),
     });
-    expect(vi.mocked(query).mock.calls[0]?.[0]).toContain("get_request_status");
+    const response = await statusHandler(request);
+    expect(response.status).toBe(404);
+    const body = await response.json() as { error: { message: string } };
+    expect(body.error.message).toBe(
+      "No encontramos una solicitud con ese código. Verifica los datos e inténtalo nuevamente.",
+    );
+  });
+
+  it("rejects malformed or missing tokens without querying the database", async () => {
+    for (const body of [{}, { token: "short" }, { token: "con espacios".repeat(5) }]) {
+      const request = new Request("https://example.test/api/requests/status", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const response = await statusHandler(request);
+      expect(response.status).toBe(400);
+    }
+    expect(vi.mocked(query)).not.toHaveBeenCalled();
+  });
+
+  it("returns 429 from the persistent rate limiter", async () => {
+    vi.mocked(query).mockResolvedValueOnce([{ allowed: false, retry_after_seconds: 45 }]);
+    const request = new Request("https://example.test/api/requests/status", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token: "x".repeat(43) }),
+    });
+    const response = await statusHandler(request);
+    expect(response.status).toBe(429);
+    expect(response.headers.get("retry-after")).toBe("45");
+    expect(vi.mocked(query)).toHaveBeenCalledTimes(1);
   });
 });
