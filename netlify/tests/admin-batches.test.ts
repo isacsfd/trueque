@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { requireAdmin } from "../lib/auth.ts";
 import { requireAdminPermission } from "../lib/admin-permissions.ts";
-import { queryAdmin } from "../lib/database.ts";
+import { DatabaseQueryError, queryAdmin } from "../lib/database.ts";
 import batchHandler from "../functions/admin-batches.ts";
 import confirmHandler from "../functions/admin-batches-confirm.ts";
 import cancelHandler from "../functions/admin-batches-cancel.ts";
@@ -142,6 +142,45 @@ describe("administrative inventory batches API", () => {
     expect(cancelled.status).toBe(200);
     expect(await cancelled.json()).toMatchObject({ status: "cancelled" });
     expect(requireAdminPermission).toHaveBeenCalledWith(7, "inventory.batches.import");
+  });
+
+  it("uses the auto-publication routine when it is installed", async () => {
+    vi.mocked(queryAdmin).mockResolvedValueOnce([{
+      batch_id: "14", status: "confirmed", inserted_rows: 2, reused_rows: 0,
+      skipped_rows: 0, auto_published: 1, auto_skipped: 1,
+    }]);
+
+    const confirmed = await confirmHandler(adminRequest("/api/admin/batches/confirm", JSON.stringify({
+      batchId: 14, idempotencyKey: "11111111-1111-4111-8111-111111111113",
+    }), "POST"));
+    expect(confirmed.status).toBe(200);
+    expect(await confirmed.json()).toMatchObject({
+      insertedRows: 2, autoPublished: 1, autoSkipped: 1,
+    });
+    expect(vi.mocked(queryAdmin)).toHaveBeenCalledWith(
+      expect.stringContaining("confirm_inventory_batch_with_publication"),
+      [14, 7, "11111111-1111-4111-8111-111111111113"],
+    );
+  });
+
+  it("falls back to the legacy confirmation when 0023 is not installed", async () => {
+    vi.mocked(queryAdmin)
+      .mockRejectedValueOnce(new DatabaseQueryError("42883"))
+      .mockResolvedValueOnce([{
+        batch_id: "15", status: "confirmed", inserted_rows: 1, reused_rows: 0, skipped_rows: 0,
+      }]);
+
+    const confirmed = await confirmHandler(adminRequest("/api/admin/batches/confirm", JSON.stringify({
+      batchId: 15, idempotencyKey: "11111111-1111-4111-8111-111111111114",
+    }), "POST"));
+    expect(confirmed.status).toBe(200);
+    expect(await confirmed.json()).toMatchObject({
+      insertedRows: 1, autoPublished: 0, autoSkipped: 0,
+    });
+    expect(vi.mocked(queryAdmin)).toHaveBeenLastCalledWith(
+      expect.stringContaining("confirm_inventory_batch($1, $2, $3)"),
+      [15, 7, "11111111-1111-4111-8111-111111111114"],
+    );
   });
 
   it("lists batches and neutralizes CSV formula injection in reports", async () => {

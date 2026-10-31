@@ -42,7 +42,11 @@ export default async function handler(request: Request): Promise<Response> {
       if (!exists[0]) throw new ApiError(404, "not_found", "No se encontró el lote.");
     }
 
-    const header = ["fila_origen", "estado", "titulo", "autor", "editorial", "isbn", "codigo_inventario", "errores", "advertencias"];
+    const header = [
+      "fila_origen", "estado", "titulo", "autor", "editorial", "isbn",
+      "codigo_inventario", "estado_fisico", "referencia_verificacion",
+      "errores", "advertencias",
+    ];
     const lines = [header.map(csv).join(",")];
     for (const row of rows) {
       lines.push([
@@ -53,6 +57,8 @@ export default async function handler(request: Request): Promise<Response> {
         row.mapped_data.publisher,
         row.mapped_data.isbn,
         row.inventory_code ?? row.mapped_data.inventory_code,
+        row.mapped_data.physical_condition,
+        row.mapped_data.verification_reference,
         row.errors.join(" | "),
         row.warnings.join(" | "),
       ].map(csv).join(","));

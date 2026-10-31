@@ -17,6 +17,8 @@ const required = [
   ["Panel administrativo", "admin panel"],
   ["Buscar solicitud", "admin search"],
   ["Ver historial", "lazy administrative history"],
+  ["Alta de ejemplar", "manual inventory registration"],
+  ["Publicar ahora", "eligible publication control"],
 ];
 for (const [needle, label] of required) {
   if (!bundle.includes(needle)) throw new Error(`Release bundle is missing ${label}: ${needle}`);

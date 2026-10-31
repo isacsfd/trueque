@@ -20,6 +20,7 @@ import {
 } from "../lib/status";
 import { EvidenceGallery } from "./EvidenceGallery";
 import { InventoryBatches } from "./InventoryBatches";
+import { InventoryRegistration } from "./InventoryRegistration";
 import { AdminStatsPanel } from "./AdminStatsPanel";
 import { AccountPanel } from "./AccountPanel";
 import { AccountsPanel } from "./AccountsPanel";
@@ -75,7 +76,7 @@ export function AdminPanel() {
   const [items, setItems] = useState<AdminWorkbenchItem[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busyRequestId, setBusyRequestId] = useState<string | null>(null);
-  const [tab, setTab] = useState<"requests" | "batches" | "stats" | "accounts" | "account">("requests");
+  const [tab, setTab] = useState<"requests" | "batches" | "register" | "stats" | "accounts" | "account">("requests");
   const [requestFilter, setRequestFilter] = useState("all");
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
@@ -248,6 +249,7 @@ export function AdminPanel() {
       <div className="admin-tabs" role="tablist" aria-label="Secciones administrativas">
         <button type="button" role="tab" aria-selected={tab === "requests"} className={tab === "requests" ? "button button-primary" : "button button-secondary"} onClick={() => setTab("requests")}>Solicitudes</button>
         <button type="button" role="tab" aria-selected={tab === "batches"} className={tab === "batches" ? "button button-primary" : "button button-secondary"} onClick={() => setTab("batches")}>Lotes de inventario</button>
+        <button type="button" role="tab" aria-selected={tab === "register"} className={tab === "register" ? "button button-primary" : "button button-secondary"} onClick={() => setTab("register")}>Alta de ejemplar</button>
         <button type="button" role="tab" aria-selected={tab === "stats"} className={tab === "stats" ? "button button-primary" : "button button-secondary"} onClick={() => setTab("stats")}>Estadísticas</button>
         <button type="button" role="tab" aria-selected={tab === "accounts"} className={tab === "accounts" ? "button button-primary" : "button button-secondary"} onClick={() => setTab("accounts")}>Cuentas</button>
         <button type="button" role="tab" aria-selected={tab === "account"} className={tab === "account" ? "button button-primary" : "button button-secondary"} onClick={() => setTab("account")}>Mi cuenta</button>
@@ -328,6 +330,7 @@ export function AdminPanel() {
         </>
       ) : null}
       {tab === "batches" ? <InventoryBatches /> : null}
+      {tab === "register" ? <InventoryRegistration /> : null}
       {tab === "stats" ? <AdminStatsPanel /> : null}
       {tab === "accounts" ? <AccountsPanel /> : null}
       {tab === "account" ? <AccountPanel /> : null}

@@ -18,9 +18,10 @@
 - `POST /api/admin/session`: login; cookie `HttpOnly`, `SameSite=Strict` y `Secure` en HTTPS. La configuración sale de `ADMIN_USERS` y `SESSION_SECRET`; el actor debe existir y estar activo en PostgreSQL antes de emitir la cookie. `GET /api/admin/session` revalida el estado activo.
 - `DELETE /api/admin/session`: logout. Exige `X-IUB-Admin: 1`.
 - `GET /api/admin/workbench`: solicitudes, estados, historial de decisiones y metadatos de evidencias, sin nombres, correos ni documentos. Requiere `requests.review`. Las imágenes se obtienen por `/api/admin/evidence` con permiso `offered_books.review`.
-- `POST /api/admin/batches`: inspect y prevalidación multipart de Excel (.xlsx) con mapeo explícito.
+- `POST /api/admin/batches`: inspect y prevalidación multipart de Excel (.xlsx) con mapeo explícito. El mapeo admite `physical_condition` y `verification_reference`.
 - `GET /api/admin/batches/list`, `GET /api/admin/batches/detail`, `GET /api/admin/batches/report`: historial, detalle y CSV.
-- `POST /api/admin/batches/confirm`, `POST /api/admin/batches/cancel`: confirmación/cancelación auditada.
+- `POST /api/admin/batches/confirm`, `POST /api/admin/batches/cancel`: confirmación/cancelación auditada. Con `0023`, las filas elegibles se publican automáticamente; sin ella se mantiene el comportamiento anterior.
+- `GET/POST /api/admin/inventory`: capacidades de alta manual y registro idempotente de un ejemplar institucional. El alta nace no disponible; publicar exige condición evaluada, referencia de verificación y permisos `inventory.verify`/`inventory.publish`.
 - `GET /api/admin/stats?months=1..12`: agregados reales; requiere `stats.read`.
 - `GET /api/admin/accounts` y `POST /api/admin/accounts`: listado, alta de actores, activación/desactivación y asignación/retirada de roles; requiere `account.manage`. No acepta contraseñas ni hashes.
 - `GET /api/admin/account` y `POST /api/admin/account`: información de cuenta; el cambio de contraseña está delegado al despliegue/OIDC.

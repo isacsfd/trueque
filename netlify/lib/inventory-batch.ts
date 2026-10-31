@@ -3,6 +3,14 @@ import { firstNonEmptyRow, rowValues, type XlsxRow, type XlsxSheet } from "./xls
 
 export const MAX_BATCH_ROWS = 5_000;
 
+const conditionAliases: Record<string, string> = {
+  excelente: "excellent",
+  bueno: "good",
+  "buen estado": "good",
+  aceptable: "fair",
+  deteriorado: "poor",
+};
+
 export interface BatchColumnMapping {
   title: string;
   author: string;
@@ -14,6 +22,8 @@ export interface BatchColumnMapping {
   observations?: string;
   source_number?: string;
   copy_number?: string;
+  physical_condition?: string;
+  verification_reference?: string;
 }
 
 export interface BatchRow {
@@ -155,6 +165,8 @@ export function validateBatch(input: {
     const observations = column(row, "observations").trim();
     const sourceNumber = column(row, "source_number").trim();
     const copyNumber = column(row, "copy_number").trim();
+    const conditionInput = column(row, "physical_condition").trim().toLowerCase();
+    const verificationReference = column(row, "verification_reference").trim();
     const errors: string[] = [];
     const warnings: string[] = [];
     const formula = row.cells.some((cell) => cell.formula);
@@ -170,6 +182,17 @@ export function validateBatch(input: {
     if (isbnInput && !isbnNormalized) errors.push("El ISBN no es válido.");
     if (code && (codeCounts.get(code) ?? 0) > 1) errors.push("Código de inventario duplicado dentro del lote.");
     if (code && input.existingCodes.has(code)) errors.push("El código de inventario ya existe en el inventario.");
+
+    const physicalCondition = conditionAliases[conditionInput] ?? conditionInput;
+    if (physicalCondition && !["excellent", "good", "fair", "poor", "unassessed"].includes(physicalCondition)) {
+      errors.push("El estado físico no es válido.");
+    }
+    if (verificationReference && (!physicalCondition || physicalCondition === "unassessed")) {
+      errors.push("La referencia de verificación requiere un estado físico evaluado.");
+    }
+    if (physicalCondition && physicalCondition !== "unassessed" && !verificationReference) {
+      warnings.push("Se importará sin publicar: falta la referencia de verificación.");
+    }
 
     const key = isbnNormalized ? `isbn:${isbnNormalized}` : `bib:${bibKey(title, author, publisher)}`;
     if ((duplicateKeys.get(key) ?? 0) > 1) {
@@ -200,6 +223,8 @@ export function validateBatch(input: {
         observations: observations || null,
         source_number: sourceNumber || null,
         copy_number: copyNumber || null,
+        physical_condition: physicalCondition || null,
+        verification_reference: verificationReference || null,
       },
       status,
       errors,

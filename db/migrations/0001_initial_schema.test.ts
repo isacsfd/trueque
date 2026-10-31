@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 const migrationUrl = new URL("./0001_initial_schema.sql", import.meta.url);
 const correctiveUrl = new URL("./0002_corrective_schema.sql", import.meta.url);
 const privilegesUrl = new URL("./0003_runtime_privileges.sql", import.meta.url);
+const p0Url = new URL("./0004_p0_integrity.sql", import.meta.url);
 const digest = (byte: number) => Buffer.alloc(32, byte);
 
 type Actor = { id: number; roleId: number };
@@ -33,6 +34,7 @@ describe("corrected PostgreSQL baseline and business invariants", () => {
     const migration = await readFile(migrationUrl, "utf8");
     const corrective = await readFile(correctiveUrl, "utf8");
     const privileges = await readFile(privilegesUrl, "utf8");
+    const p0 = await readFile(p0Url, "utf8");
 
     await database.exec(`
       CREATE ROLE iub_schema_migrator LOGIN;
@@ -45,6 +47,7 @@ describe("corrected PostgreSQL baseline and business invariants", () => {
     await database.exec(migration);
     await database.exec(corrective);
     await database.exec(privileges);
+    await database.exec(p0);
     await database.exec("COMMIT");
     await database.exec("RESET ROLE");
   });
@@ -518,6 +521,12 @@ describe("corrected PostgreSQL baseline and business invariants", () => {
     expect(receivedCopy.rows[0]?.availability).toBe("unavailable");
 
     await database.query("SELECT public.enable_received_copy($1, $2)", [workflow.admissionId, workflow.actor.manager.id]);
+    const afterEnable = await database.query<{ availability: string; in_catalog: boolean }>(`
+      SELECT c.availability,
+        EXISTS (SELECT 1 FROM public.available_catalog ac WHERE ac.copy_id = c.id) AS in_catalog
+      FROM public.copies c WHERE c.id = $1
+    `, [workflow.offeredCopyId]);
+    expect(afterEnable.rows[0]).toEqual({ availability: "unavailable", in_catalog: false });
     await database.query("SELECT public.start_exchange($1, $2)", [workflow.exchangeId, workflow.actor.manager.id]);
     await database.query(
       `UPDATE public.reservations SET created_at = clock_timestamp() - interval '1 hour',
@@ -544,6 +553,19 @@ describe("corrected PostgreSQL baseline and business invariants", () => {
       WHERE e.id = $1
     `, [workflow.exchangeId]);
     expect(preComplete.rows[0]).toEqual({ status: "in_process", availability: "reserved", movement_count: 0 });
+
+    const offeredPreComplete = await database.query<{ availability: string; in_catalog: boolean; exchange_in_count: number }>(`
+      SELECT c.availability,
+        EXISTS (SELECT 1 FROM public.available_catalog ac WHERE ac.copy_id = c.id) AS in_catalog,
+        (SELECT count(*)::int FROM public.inventory_movements m
+          WHERE m.copy_id = c.id AND m.movement_type = 'exchange_in') AS exchange_in_count
+      FROM public.copies c WHERE c.id = $1
+    `, [workflow.offeredCopyId]);
+    expect(offeredPreComplete.rows[0]).toEqual({
+      availability: "unavailable",
+      in_catalog: false,
+      exchange_in_count: 0,
+    });
 
     const handoverId = await database.query<{ schedule_delivery: string }>(
       `SELECT public.schedule_delivery($1, 'institutional_copy_handover', clock_timestamp() + interval '1 hour', $2, $3)`,
@@ -735,8 +757,42 @@ describe("corrected PostgreSQL baseline and business invariants", () => {
       "SELECT public.cancel_exchange($1, $2, $3, 'cancel before physical handover')",
       [workflow.exchangeId, cancellationKey, workflow.actor.manager.id],
     );
+    const pending = await database.query<{ request_status: string; exchange_status: string; reception_status: string }>(`
+      SELECT r.status AS request_status, e.status AS exchange_status, rec.status AS reception_status
+      FROM public.exchanges e
+      JOIN public.exchange_requests r ON r.id = e.request_id
+      JOIN public.receptions rec ON rec.id = e.offered_reception_id
+      WHERE e.id = $1
+    `, [workflow.exchangeId]);
+    expect(pending.rows[0]).toEqual({
+      request_status: "cancellation_pending",
+      exchange_status: "cancellation_pending",
+      reception_status: "return_pending",
+    });
+    await expect(
+      database.query(
+        "SELECT public.cancel_exchange($1, $2, $3, 'replayed cancellation')",
+        [workflow.exchangeId, cancellationKey, workflow.actor.manager.id],
+      ),
+    ).rejects.toThrow(/physical return/);
+
+    const returnDelivery = await database.query<{ id: string; idempotency_key: string }>(
+      `SELECT id, idempotency_key FROM public.deliveries
+       WHERE exchange_id = $1 AND delivery_type = 'offered_book_return'
+         AND status = 'scheduled' ORDER BY id DESC LIMIT 1`,
+      [workflow.exchangeId],
+    );
+    expect(returnDelivery.rows[0]).toBeTruthy();
     await database.query(
-      "SELECT public.cancel_exchange($1, $2, $3, 'replayed cancellation')",
+      "SELECT public.confirm_delivery($1, $2, 'return/1', 'participant return', $3)",
+      [
+        Number(returnDelivery.rows[0]!.id),
+        workflow.actor.receiver.id,
+        returnDelivery.rows[0]!.idempotency_key,
+      ],
+    );
+    await database.query(
+      "SELECT public.cancel_exchange($1, $2, $3, 'return confirmed')",
       [workflow.exchangeId, cancellationKey, workflow.actor.manager.id],
     );
 

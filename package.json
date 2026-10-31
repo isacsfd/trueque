@@ -14,6 +14,7 @@
     "test": "vitest run",
     "test:postgres": "node scripts/p0-postgres.mjs",
     "test:inventory:postgres": "node scripts/inventory-repair-postgres.mjs",
+    "test:inventory:registration": "node scripts/inventory-registration-postgres.mjs",
     "audit:0011:postgres": "node scripts/audit-0011-postgres.mjs",
     "test:admins:provision": "node scripts/provision-test-admins.mjs",
     "staging:check": "node scripts/staging-check.mjs",

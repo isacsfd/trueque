@@ -40,7 +40,11 @@ function mappingObject(raw: string): BatchColumnMapping {
     throw new ApiError(400, "invalid_mapping", "El mapeo de columnas no es válido.");
   }
   const result: Record<string, string> = {};
-  for (const key of ["title", "author", "publisher", "genre", "isbn", "inventory_code", "location", "observations", "source_number", "copy_number"]) {
+  for (const key of [
+    "title", "author", "publisher", "genre", "isbn", "inventory_code", "location",
+    "observations", "source_number", "copy_number", "physical_condition",
+    "verification_reference",
+  ]) {
     const value = (parsed as Record<string, unknown>)[key];
     if (value !== undefined) {
       if (typeof value !== "string") throw new ApiError(400, "invalid_mapping", "El mapeo contiene valores no válidos.");

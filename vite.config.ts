@@ -7,7 +7,11 @@ export default defineConfig({
     environment: "jsdom",
     setupFiles: ["./src/test/setup.ts"],
     clearMocks: true,
-    hookTimeout: 30_000,
-    testTimeout: 30_000,
+    // PGlite/WASM database suites are CPU- and memory-heavy. Four workers keep
+    // the full suite deterministic on developer machines without hiding any
+    // assertion failure.
+    maxWorkers: 4,
+    hookTimeout: 60_000,
+    testTimeout: 60_000,
   },
 });

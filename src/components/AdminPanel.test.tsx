@@ -5,6 +5,7 @@ import {
   fetchAdminWorkbenchDetail,
   fetchAdminWorkbenchPage,
   fetchEvidenceBlob,
+  fetchInventoryRegistrationCapabilities,
   getAdminSession,
   runAdminAction,
 } from "../lib/api";
@@ -22,6 +23,8 @@ vi.mock("../lib/api", () => ({
   runAdminAction: vi.fn(),
   issueLookupToken: vi.fn(),
   fetchInventoryBatches: vi.fn(),
+  fetchInventoryRegistrationCapabilities: vi.fn(),
+  registerInstitutionalCopy: vi.fn(),
   inspectInventoryBatch: vi.fn(),
   prevalidateInventoryBatch: vi.fn(),
   confirmInventoryBatch: vi.fn(),
@@ -72,6 +75,11 @@ const item = {
 
 describe("panel administrativo", () => {
   beforeEach(() => {
+    vi.mocked(fetchInventoryRegistrationCapabilities).mockResolvedValue({
+      canRegister: true,
+      canVerify: true,
+      canPublish: true,
+    });
     vi.mocked(fetchAdminWorkbenchPage).mockImplementation(async () => {
       const items = (await vi.mocked(fetchAdminWorkbench)()) ?? [];
       return {
@@ -308,7 +316,22 @@ describe("panel administrativo", () => {
     await waitFor(() => {
       expect(screen.getByRole("heading", { name: "Lotes de inventario" })).toBeInTheDocument();
     });
-    expect(screen.getByText(/no se publican automáticamente/i)).toBeInTheDocument();
+    expect(screen.getByText(/se publican automáticamente/i)).toBeInTheDocument();
+  });
+
+  it("abre el alta manual de ejemplares", async () => {
+    vi.mocked(getAdminSession).mockResolvedValue({ username: "admin" });
+    vi.mocked(fetchAdminWorkbench).mockResolvedValue([]);
+
+    render(<AdminPanel />);
+    await screen.findByRole("tab", { name: "Alta de ejemplar" });
+    fireEvent.click(screen.getByRole("tab", { name: "Alta de ejemplar" }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { name: "Alta manual de ejemplar" })).toBeInTheDocument();
+    });
+    expect(screen.getByLabelText("Título")).toBeInTheDocument();
+    expect(screen.getByLabelText("Código de inventario")).toBeInTheDocument();
   });
 
   it("abre la gestión de cuentas y protege la sesión propia", async () => {

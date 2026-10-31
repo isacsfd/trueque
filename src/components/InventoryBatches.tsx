@@ -20,6 +20,8 @@ const fields: Array<{ key: string; label: string; required?: boolean }> = [
   { key: "location", label: "Ubicación" },
   { key: "source_number", label: "Número fuente" },
   { key: "copy_number", label: "Número de ejemplar" },
+  { key: "physical_condition", label: "Estado físico (excellent/good/fair/poor)" },
+  { key: "verification_reference", label: "Referencia de verificación" },
   { key: "observations", label: "Observaciones" },
 ];
 
@@ -141,7 +143,11 @@ export function InventoryBatches() {
     setMessage(null);
     try {
       const result = await confirmInventoryBatch(batchId, newKey());
-      setMessage(`Lote confirmado: ${result.insertedRows} insertados, ${result.reusedRows} reutilizados, ${result.skippedRows} omitidos.`);
+      setMessage(
+        `Lote confirmado: ${result.insertedRows} insertados, ${result.reusedRows} reutilizados, ` +
+        `${result.skippedRows} omitidos. Publicados automáticamente: ${result.autoPublished ?? 0}. ` +
+        `Pendientes de verificación o publicación: ${result.autoSkipped ?? 0}.`,
+      );
       setSummary(null);
       await refreshList();
       setDetail(await fetchInventoryBatch(batchId));
@@ -193,7 +199,11 @@ export function InventoryBatches() {
       <div className="section-heading">
         <div><p className="eyebrow">Inventario institucional</p><h3 id="batches-title">Lotes de inventario</h3></div>
       </div>
-      <div className="notice notice-warning">Los lotes no se publican automáticamente. Al confirmar se crean ejemplares institucionales no disponibles, sin verificación positiva y sin movimientos ficticios.</div>
+      <div className="notice notice-warning">
+        Las filas con estado físico evaluado y referencia de verificación se publican automáticamente
+        si el operador tiene permisos de verificación y publicación. Las demás se importan como no
+        disponibles y quedan pendientes de verificación. No se inventan movimientos ni verificaciones.
+      </div>
       {error ? <div className="notice notice-error" role="alert">{error}</div> : null}
       {message ? <div className="notice notice-success" role="status">{message}</div> : null}
 

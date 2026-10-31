@@ -328,11 +328,55 @@ export function fetchInventoryBatch(batchId: string): Promise<BatchDetail> {
 
 export function confirmInventoryBatch(batchId: string, idempotencyKey: string): Promise<{
   batchId: string; status: string; insertedRows: number; reusedRows: number; skippedRows: number;
+  autoPublished?: number; autoSkipped?: number;
 }> {
   return request("/api/admin/batches/confirm", {
     method: "POST",
     headers: { "X-IUB-Admin": "1" },
     body: JSON.stringify({ batchId, idempotencyKey }),
+  });
+}
+
+export interface InventoryRegistrationCapabilities {
+  canRegister: boolean;
+  canVerify: boolean;
+  canPublish: boolean;
+}
+
+export interface InventoryRegistrationInput {
+  title: string;
+  author: string;
+  publisher?: string;
+  genre?: string;
+  isbn?: string;
+  inventoryCode: string;
+  location?: string;
+  physicalCondition: "unassessed" | "excellent" | "good" | "fair" | "poor";
+  verificationReference?: string;
+  publish: boolean;
+  idempotencyKey: string;
+}
+
+export interface InventoryRegistrationResult {
+  copyId: string;
+  bibliographicRecordId: string;
+  inventoryCode: string;
+  availability: string;
+  verified: boolean;
+  published: boolean;
+  created: boolean;
+}
+
+export function fetchInventoryRegistrationCapabilities(): Promise<InventoryRegistrationCapabilities> {
+  return request<{ capabilities: InventoryRegistrationCapabilities }>("/api/admin/inventory")
+    .then((result) => result.capabilities);
+}
+
+export function registerInstitutionalCopy(input: InventoryRegistrationInput): Promise<InventoryRegistrationResult> {
+  return request<InventoryRegistrationResult>("/api/admin/inventory", {
+    method: "POST",
+    headers: { "X-IUB-Admin": "1" },
+    body: JSON.stringify(input),
   });
 }
 

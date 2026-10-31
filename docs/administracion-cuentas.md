@@ -46,6 +46,9 @@ prueba.
 | `inventory.batches.import` | Prevalidar y cancelar lotes Excel |
 | `inventory.batches.confirm` | Confirmar un lote prevalidado |
 | `inventory.batches.read` | Historial, detalle y reportes de lotes |
+| `inventory.register` | Alta manual de ejemplares institucionales |
+| `inventory.verify` | Verificación positiva de un ejemplar |
+| `inventory.publish` | Publicación de un ejemplar verificado |
 | `stats.read` | Estadísticas agregadas |
 | `account.manage` | Listado, alta, activación, desactivación y roles |
 | `inventory.admit` | Autorizar y admitir ejemplares recibidos |
