@@ -9,6 +9,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "build:release": "tsc -b && vite build --mode release --outDir release-candidate --emptyOutDir && node scripts/copy-release-static.mjs && node scripts/verify-release.mjs",
     "lint": "eslint .",
     "test": "vitest run",
     "test:postgres": "node scripts/p0-postgres.mjs",

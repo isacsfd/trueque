@@ -615,6 +615,23 @@ describe("corrected PostgreSQL baseline and business invariants", () => {
       institutional_availability: "retired",
       movement_count: 2,
     });
+
+    const offeredCopy = await database.query<{
+      availability: string;
+      exchange_in_movements: number;
+      in_catalog: boolean;
+    }>(`
+      SELECT c.availability,
+        (SELECT count(*)::int FROM public.inventory_movements m
+          WHERE m.copy_id = c.id AND m.movement_type = 'exchange_in') AS exchange_in_movements,
+        EXISTS (SELECT 1 FROM public.available_catalog ac WHERE ac.copy_id = c.id) AS in_catalog
+      FROM public.copies c WHERE c.id = $1
+    `, [workflow.offeredCopyId]);
+    expect(offeredCopy.rows[0]).toEqual({
+      availability: "available",
+      exchange_in_movements: 1,
+      in_catalog: true,
+    });
     const histories = await database.query<{ count: number }>(
       "SELECT count(*)::int AS count FROM public.state_history WHERE entity_type IN ('exchange', 'exchange_request') AND entity_id = $1",
       [workflow.exchangeId],

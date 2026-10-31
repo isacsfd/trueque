@@ -1184,3 +1184,71 @@ h2 {
   border-radius: 0.55rem;
   background: #fff;
 }
+
+.catalog-controls {
+  display: flex;
+  align-items: end;
+  gap: 0.8rem;
+  flex-wrap: wrap;
+  margin: 1rem 0 0.6rem;
+}
+
+.catalog-search {
+  flex: 1 1 320px;
+  display: grid;
+  gap: 0.35rem;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--color-muted);
+}
+
+.catalog-search input,
+.catalog-filter select {
+  width: 100%;
+  padding: 0.7rem 0.8rem;
+  border: 1px solid var(--color-border);
+  border-radius: 0.55rem;
+  background: #fff;
+  color: var(--color-ink);
+  font: inherit;
+}
+
+.catalog-filter {
+  display: grid;
+  gap: 0.35rem;
+  min-width: 190px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--color-muted);
+}
+
+.catalog-clear {
+  min-height: 2.7rem;
+}
+
+.catalog-count {
+  margin: 0 0 0.8rem;
+  color: var(--color-muted);
+  font-size: 0.86rem;
+}
+
+.catalog-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.9rem;
+  margin-top: 1.2rem;
+  color: var(--color-muted);
+  font-size: 0.86rem;
+}
+
+.admin-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.9rem;
+  flex-wrap: wrap;
+  margin-top: 1.2rem;
+  color: var(--color-muted);
+  font-size: 0.86rem;
+}

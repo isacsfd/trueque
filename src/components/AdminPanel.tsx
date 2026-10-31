@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import {
-  fetchAdminWorkbench,
+  fetchAdminWorkbenchDetail,
+  fetchAdminWorkbenchPage,
   getAdminSession,
   issueLookupToken,
   loginAdmin,
@@ -76,6 +77,12 @@ export function AdminPanel() {
   const [busyRequestId, setBusyRequestId] = useState<string | null>(null);
   const [tab, setTab] = useState<"requests" | "batches" | "stats" | "accounts" | "account">("requests");
   const [requestFilter, setRequestFilter] = useState("all");
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
+  const [search, setSearch] = useState("");
+  const [appliedSearch, setAppliedSearch] = useState("");
+  const [loadingPage, setLoadingPage] = useState(false);
   const [now, setNow] = useState(() => new Date());
 
   useEffect(() => {
@@ -83,9 +90,30 @@ export function AdminPanel() {
     return () => window.clearInterval(timer);
   }, []);
 
+  async function loadPage(targetPage: number, status = requestFilter, query = appliedSearch) {
+    setLoadingPage(true);
+    setError(null);
+    try {
+      const workbench = await fetchAdminWorkbenchPage({
+        page: targetPage,
+        pageSize: 25,
+        status: status === "all" ? undefined : status,
+        q: query,
+        history: false,
+      });
+      setItems(workbench.items);
+      setPage(workbench.page);
+      setTotal(workbench.total);
+      setHasMore(workbench.hasMore);
+      setRequestFilter(status);
+      setAppliedSearch(query);
+    } finally {
+      setLoadingPage(false);
+    }
+  }
+
   async function refresh() {
-    const workbench = await fetchAdminWorkbench();
-    setItems(workbench);
+    await loadPage(page, requestFilter, appliedSearch);
   }
 
   useEffect(() => {
@@ -95,8 +123,13 @@ export function AdminPanel() {
         if (!active) return;
         setSession(current);
         try {
-          const workbench = await fetchAdminWorkbench();
-          if (active) setItems(workbench);
+          const workbench = await fetchAdminWorkbenchPage({ page: 1, pageSize: 25, history: false });
+          if (active) {
+            setItems(workbench.items);
+            setPage(workbench.page);
+            setTotal(workbench.total);
+            setHasMore(workbench.hasMore);
+          }
         } catch (reason) {
           if (active) {
             if (errorStatus(reason) === 401) setSession(null);
@@ -161,9 +194,18 @@ export function AdminPanel() {
     }
   }
 
-  const visibleItems = requestFilter === "all"
-    ? items
-    : items.filter((item) => item.requestStatus === requestFilter);
+  function changeStatus(value: string) {
+    setRequestFilter(value);
+    void loadPage(1, value, appliedSearch).catch((reason) => setError(adminErrorMessage(reason)));
+  }
+
+  function applySearch() {
+    const query = search.trim();
+    void loadPage(1, requestFilter, query).catch((reason) => setError(adminErrorMessage(reason)));
+  }
+
+  const visibleItems = items;
+  const totalPages = Math.max(1, Math.ceil(total / 25));
 
   if (checking) {
     return <section className="section-block"><p role="status">Comprobando sesión administrativa…</p></section>;
@@ -216,8 +258,8 @@ export function AdminPanel() {
           {error ? <div className="notice notice-error" role="alert">{error}</div> : null}
           <div className="admin-filter">
             <label>Filtrar solicitudes
-              <select value={requestFilter} onChange={(event) => setRequestFilter(event.target.value)}>
-                <option value="all">Todas ({items.length})</option>
+              <select value={requestFilter} onChange={(event) => changeStatus(event.target.value)} disabled={loadingPage}>
+                <option value="all">Todas ({total})</option>
                 <option value="pending">Pendientes</option>
                 <option value="under_review">En revisión</option>
                 <option value="approved">Aprobadas</option>
@@ -229,6 +271,25 @@ export function AdminPanel() {
                 <option value="cancelled">Canceladas</option>
               </select>
             </label>
+            <label>Buscar solicitud
+              <input
+                type="search"
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    applySearch();
+                  }
+                }}
+                placeholder="Código, título o autor"
+                maxLength={120}
+                autoComplete="off"
+              />
+            </label>
+            <button className="button button-secondary" type="button" onClick={applySearch} disabled={loadingPage}>
+              Buscar
+            </button>
           </div>
           {visibleItems.length === 0 ? <div className="notice">No hay solicitudes en este filtro.</div> : null}
           <div className="admin-list">
@@ -243,6 +304,27 @@ export function AdminPanel() {
               />
             ))}
           </div>
+          {totalPages > 1 ? (
+            <div className="admin-pagination">
+              <button
+                className="button button-secondary"
+                type="button"
+                disabled={page <= 1 || loadingPage}
+                onClick={() => void loadPage(page - 1, requestFilter, appliedSearch).catch((reason) => setError(adminErrorMessage(reason)))}
+              >
+                Anterior
+              </button>
+              <span>Página {page} de {totalPages} · {total} solicitudes</span>
+              <button
+                className="button button-secondary"
+                type="button"
+                disabled={!hasMore || loadingPage}
+                onClick={() => void loadPage(page + 1, requestFilter, appliedSearch).catch((reason) => setError(adminErrorMessage(reason)))}
+              >
+                Siguiente
+              </button>
+            </div>
+          ) : null}
         </>
       ) : null}
       {tab === "batches" ? <InventoryBatches /> : null}
@@ -353,6 +435,58 @@ function ScheduleDropoffForm({
   );
 }
 
+function RequestHistory({ requestId }: { requestId: string }) {
+  const [history, setHistory] = useState<AdminWorkbenchItem["history"] | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function load() {
+    setBusy(true);
+    setError(null);
+    try {
+      const detail = await fetchAdminWorkbenchDetail(requestId);
+      setHistory(detail.history);
+    } catch (reason) {
+      setError(adminErrorMessage(reason));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (history === null) {
+    return (
+      <div className="button-row">
+        <button className="button button-secondary" type="button" onClick={() => void load()} disabled={busy}>
+          {busy ? "Cargando historial…" : "Ver historial"}
+        </button>
+        {error ? <p className="field-error" role="alert">{error}</p> : null}
+      </div>
+    );
+  }
+
+  if (history.length === 0) {
+    return <p className="quiet">Sin movimientos registrados.</p>;
+  }
+
+  return (
+    <section className="request-history" aria-labelledby={`history-${requestId}`}>
+      <h4 id={`history-${requestId}`}>Historial de la solicitud</h4>
+      <ol>
+        {history.map((entry, index) => (
+          <li key={`${entry.changedAt}-${index}`}>
+            <span>{requestStatusLabel(entry.newStatus)}</span>
+            <span className="quiet">
+              {new Date(entry.changedAt).toLocaleString()}
+              {entry.changedBy ? ` · ${entry.changedBy}` : ""}
+            </span>
+            {entry.reason ? <span className="quiet">Motivo: {entry.reason}</span> : null}
+          </li>
+        ))}
+      </ol>
+    </section>
+  );
+}
+
 function AdminRequestCard({
   item,
   now,
@@ -404,23 +538,10 @@ function AdminRequestCard({
         <div><dt>Admisión</dt><dd>{item.admissionStatus ? admissionStatusLabel(item.admissionStatus) : "Sin admisión"}</dd></div>
       </dl>
 
-      {item.history && item.history.length > 0 ? (
-        <section className="request-history" aria-labelledby={`history-${item.requestId}`}>
-          <h4 id={`history-${item.requestId}`}>Historial de la solicitud</h4>
-          <ol>
-            {item.history.map((entry, index) => (
-              <li key={`${entry.changedAt}-${index}`}>
-                <span>{requestStatusLabel(entry.newStatus)}</span>
-                <span className="quiet">
-                  {new Date(entry.changedAt).toLocaleString()}
-                  {entry.changedBy ? ` · ${entry.changedBy}` : ""}
-                </span>
-                {entry.reason ? <span className="quiet">Motivo: {entry.reason}</span> : null}
-              </li>
-            ))}
-          </ol>
-        </section>
-      ) : null}
+      <RequestHistory
+        key={`${item.requestId}-${item.requestStatus}-${item.exchangeStatus ?? ""}-${item.admissionStatus ?? ""}`}
+        requestId={item.requestId}
+      />
 
       {item.submissionId ? (
         <section className="submission-review" aria-labelledby={`submission-${item.submissionId}`}>

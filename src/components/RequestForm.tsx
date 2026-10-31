@@ -8,6 +8,7 @@ import {
   uploadOfferedBookEvidence,
 } from "../lib/api";
 import type { CatalogItem } from "../lib/types";
+import { LegacyRequestForm } from "./LegacyRequestForm";
 
 interface RequestFormProps {
   selected: CatalogItem | null;
@@ -55,7 +56,7 @@ function newToken(): string {
   return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
-export function RequestForm({ selected, onBack, onCreated }: RequestFormProps) {
+export function PhotoRequestForm({ selected, onBack, onCreated }: RequestFormProps) {
   const [step, setStep] = useState<"details" | "participant">("details");
   const [draft, setDraft] = useState<{ submissionId: string; accessToken: string } | null>(null);
   const [draftKey] = useState(newKey);
@@ -426,4 +427,11 @@ export function RequestForm({ selected, onBack, onCreated }: RequestFormProps) {
       )}
     </section>
   );
+}
+
+export function RequestForm(props: RequestFormProps) {
+  if (import.meta.env.VITE_REQUEST_MODE === "legacy") {
+    return <LegacyRequestForm {...props} />;
+  }
+  return <PhotoRequestForm {...props} />;
 }

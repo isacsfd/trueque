@@ -67,8 +67,43 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   return body as T;
 }
 
+export interface CatalogPage {
+  items: CatalogItem[];
+  pagination: {
+    page: number;
+    pageSize: number;
+    total: number;
+    hasMore: boolean;
+  };
+  genres: string[];
+  query: {
+    q: string | null;
+    genre: string | null;
+    code: string | null;
+  };
+}
+
+export interface CatalogQuery {
+  q?: string;
+  genre?: string;
+  code?: string;
+  page?: number;
+  pageSize?: number;
+}
+
+export function fetchCatalogPage(input: CatalogQuery = {}): Promise<CatalogPage> {
+  const params = new URLSearchParams();
+  if (input.q?.trim()) params.set("q", input.q.trim());
+  if (input.genre?.trim()) params.set("genre", input.genre.trim());
+  if (input.code?.trim()) params.set("code", input.code.trim());
+  if (input.page && input.page > 0) params.set("page", String(input.page));
+  if (input.pageSize && input.pageSize > 0) params.set("pageSize", String(input.pageSize));
+  const suffix = params.size > 0 ? `?${params.toString()}` : "";
+  return request<CatalogPage>(`/api/catalog${suffix}`);
+}
+
 export function fetchCatalog(): Promise<CatalogItem[]> {
-  return request<{ items: CatalogItem[] }>("/api/catalog").then((result) => result.items);
+  return fetchCatalogPage().then((result) => result.items);
 }
 
 export function createExchangeRequest(input: {
@@ -394,8 +429,54 @@ export function logoutAdmin(): Promise<void> {
   });
 }
 
+export interface AdminWorkbenchPage {
+  items: AdminWorkbenchItem[];
+  capabilities: {
+    can_review: boolean;
+    can_import: boolean;
+    can_read_batches: boolean;
+    can_read_contact: boolean;
+    can_manage_accounts: boolean;
+  };
+  page: number;
+  pageSize: number;
+  total: number;
+  hasMore: boolean;
+  historyIncluded: boolean;
+}
+
+export interface AdminWorkbenchQuery {
+  status?: string;
+  q?: string;
+  page?: number;
+  pageSize?: number;
+  history?: boolean;
+}
+
+export function fetchAdminWorkbenchPage(input: AdminWorkbenchQuery = {}): Promise<AdminWorkbenchPage> {
+  const params = new URLSearchParams();
+  if (input.status && input.status !== "all") params.set("status", input.status);
+  if (input.q?.trim()) params.set("q", input.q.trim());
+  if (input.page && input.page > 0) params.set("page", String(input.page));
+  if (input.pageSize && input.pageSize > 0) params.set("pageSize", String(input.pageSize));
+  if (input.history === false) params.set("history", "0");
+  const suffix = params.size > 0 ? `?${params.toString()}` : "";
+  return request<AdminWorkbenchPage>(`/api/admin/workbench${suffix}`);
+}
+
 export function fetchAdminWorkbench(): Promise<AdminWorkbenchItem[]> {
-  return request<{ items: AdminWorkbenchItem[] }>("/api/admin/workbench").then((result) => result.items);
+  return fetchAdminWorkbenchPage({ page: 1, pageSize: 100 }).then((result) => result.items);
+}
+
+export interface AdminWorkbenchDetail {
+  requestId: string;
+  history: AdminWorkbenchItem["history"];
+  deliveries: AdminWorkbenchItem["deliveries"];
+  evidence: AdminWorkbenchItem["evidence"];
+}
+
+export function fetchAdminWorkbenchDetail(requestId: string): Promise<AdminWorkbenchDetail> {
+  return request<AdminWorkbenchDetail>(`/api/admin/workbench/detail?requestId=${encodeURIComponent(requestId)}`);
 }
 
 export function runAdminAction(input: AdminActionBody & { action: AdminActionBody["action"] }): Promise<unknown> {

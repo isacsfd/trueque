@@ -108,6 +108,7 @@ describe("administrative workbench", () => {
         }];
       }
       if (sql.includes("to_regclass")) return [{ has_submissions: false }];
+      if (sql.includes("count(*)::int AS total")) return [{ total: 1 }];
       if (sql.includes("FROM public.exchange_requests")) return [workbenchRow()];
       if (sql.includes("get_participant_contact")) {
         return [{
@@ -160,6 +161,7 @@ describe("administrative workbench", () => {
         }];
       }
       if (sql.includes("to_regclass")) return [{ has_submissions: false }];
+      if (sql.includes("count(*)::int AS total")) return [{ total: 1 }];
       if (sql.includes("FROM public.exchange_requests")) return [workbenchRow()];
       return [];
     });
@@ -186,5 +188,116 @@ describe("administrative workbench", () => {
 
     const response = await handler(new Request("https://example.test/api/admin/workbench"));
     expect(response.status).toBe(403);
+  });
+
+  it("paginates and filters on the server without changing the legacy default", async () => {
+    vi.mocked(requireAdmin).mockReturnValue({ username: "manager", actorUserId: 7, expiresAt: 9999999999 });
+    vi.mocked(queryAdmin).mockImplementation(async (sql) => {
+      if (sql.includes("AS allowed")) return [{ allowed: true }];
+      if (sql.includes("AS can_review")) {
+        return [{
+          can_review: true,
+          can_import: false,
+          can_read_batches: false,
+          can_read_contact: false,
+          can_manage_accounts: false,
+        }];
+      }
+      if (sql.includes("to_regclass")) return [{ has_submissions: false }];
+      if (sql.includes("count(*)::int AS total")) return [{ total: 30 }];
+      if (sql.includes("FROM public.exchange_requests")) return [workbenchRow()];
+      return [];
+    });
+
+    const response = await handler(new Request("https://example.test/api/admin/workbench?status=approved&q=libro&page=2&pageSize=25"));
+    expect(response.status).toBe(200);
+    const body = await response.json() as {
+      page: number;
+      pageSize: number;
+      total: number;
+      hasMore: boolean;
+    };
+    expect(body).toMatchObject({ page: 2, pageSize: 25, total: 30, hasMore: true });
+    expect(vi.mocked(queryAdmin)).toHaveBeenCalledWith(
+      expect.stringContaining("LIMIT $3 OFFSET $4"),
+      ["approved", "libro", 25, 25],
+    );
+  });
+
+  it("omits history and delivery relations in summary mode", async () => {
+    vi.mocked(requireAdmin).mockReturnValue({ username: "manager", actorUserId: 7, expiresAt: 9999999999 });
+    vi.mocked(queryAdmin).mockImplementation(async (sql) => {
+      if (sql.includes("AS allowed")) return [{ allowed: true }];
+      if (sql.includes("AS can_review")) {
+        return [{
+          can_review: true,
+          can_import: false,
+          can_read_batches: false,
+          can_read_contact: false,
+          can_manage_accounts: false,
+        }];
+      }
+      if (sql.includes("to_regclass")) return [{ has_submissions: false }];
+      if (sql.includes("count(*)::int AS total")) return [{ total: 1 }];
+      if (sql.includes("FROM public.exchange_requests")) return [workbenchRow()];
+      return [];
+    });
+
+    const response = await handler(new Request("https://example.test/api/admin/workbench?summary=1&pageSize=25"));
+    expect(response.status).toBe(200);
+    const body = await response.json() as { summary: boolean; items: Array<{ history: unknown[]; deliveries: unknown[] }> };
+    expect(body.summary).toBe(true);
+    const dataCall = vi.mocked(queryAdmin).mock.calls.find(([sql]) => String(sql).includes("LIMIT $3 OFFSET $4"));
+    expect(String(dataCall?.[0])).not.toContain("public.state_history");
+    expect(String(dataCall?.[0])).not.toContain("public.deliveries");
+  });
+
+  it("omits only history when history=0 while keeping deliveries for actions", async () => {
+    vi.mocked(requireAdmin).mockReturnValue({ username: "manager", actorUserId: 7, expiresAt: 9999999999 });
+    vi.mocked(queryAdmin).mockImplementation(async (sql) => {
+      if (sql.includes("AS allowed")) return [{ allowed: true }];
+      if (sql.includes("AS can_review")) {
+        return [{
+          can_review: true,
+          can_import: false,
+          can_read_batches: false,
+          can_read_contact: false,
+          can_manage_accounts: false,
+        }];
+      }
+      if (sql.includes("to_regclass")) return [{ has_submissions: false }];
+      if (sql.includes("count(*)::int AS total")) return [{ total: 1 }];
+      if (sql.includes("FROM public.exchange_requests")) return [workbenchRow()];
+      return [];
+    });
+
+    const response = await handler(new Request("https://example.test/api/admin/workbench?history=0&pageSize=25"));
+    expect(response.status).toBe(200);
+    const body = await response.json() as { historyIncluded: boolean };
+    expect(body.historyIncluded).toBe(false);
+    const dataCall = vi.mocked(queryAdmin).mock.calls.find(([sql]) => String(sql).includes("LIMIT $3 OFFSET $4"));
+    expect(String(dataCall?.[0])).not.toContain("public.state_history");
+    expect(String(dataCall?.[0])).toContain("public.deliveries");
+  });
+
+  it("rejects an invalid status filter", async () => {
+    vi.mocked(requireAdmin).mockReturnValue({ username: "viewer", actorUserId: 9, expiresAt: 9999999999 });
+    vi.mocked(queryAdmin).mockImplementation(async (sql) => {
+      if (sql.includes("AS allowed")) return [{ allowed: true }];
+      if (sql.includes("AS can_review")) {
+        return [{
+          can_review: false,
+          can_import: false,
+          can_read_batches: false,
+          can_read_contact: false,
+          can_manage_accounts: false,
+        }];
+      }
+      if (sql.includes("to_regclass")) return [{ has_submissions: false }];
+      return [];
+    });
+
+    const response = await handler(new Request("https://example.test/api/admin/workbench?status=nope"));
+    expect(response.status).toBe(400);
   });
 });

@@ -1,11 +1,20 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { fetchAdminWorkbench, fetchEvidenceBlob, getAdminSession, runAdminAction } from "../lib/api";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  fetchAdminWorkbench,
+  fetchAdminWorkbenchDetail,
+  fetchAdminWorkbenchPage,
+  fetchEvidenceBlob,
+  getAdminSession,
+  runAdminAction,
+} from "../lib/api";
 import { institutionalDate, proposedDeliveryInstant, todayInInstitutionalTimeZone } from "../lib/institutional-time";
 import { AdminPanel } from "./AdminPanel";
 
 vi.mock("../lib/api", () => ({
   fetchAdminWorkbench: vi.fn(),
+  fetchAdminWorkbenchPage: vi.fn(),
+  fetchAdminWorkbenchDetail: vi.fn(),
   getAdminSession: vi.fn(),
   fetchEvidenceBlob: vi.fn(),
   loginAdmin: vi.fn(),
@@ -62,6 +71,27 @@ const item = {
 };
 
 describe("panel administrativo", () => {
+  beforeEach(() => {
+    vi.mocked(fetchAdminWorkbenchPage).mockImplementation(async () => {
+      const items = (await vi.mocked(fetchAdminWorkbench)()) ?? [];
+      return {
+        items,
+        capabilities: {
+          can_review: true,
+          can_import: false,
+          can_read_batches: false,
+          can_read_contact: false,
+          can_manage_accounts: false,
+        },
+        page: 1,
+        pageSize: 25,
+        total: items.length,
+        hasMore: false,
+        historyIncluded: false,
+      };
+    });
+  });
+
   afterEach(() => {
     cleanup();
     vi.restoreAllMocks();
@@ -95,6 +125,35 @@ describe("panel administrativo", () => {
         : [],
     };
   }
+
+  it("carga el historial solo cuando se abre", async () => {
+    vi.mocked(getAdminSession).mockResolvedValue({ username: "admin" });
+    vi.mocked(fetchAdminWorkbench).mockResolvedValue([item]);
+    vi.mocked(fetchAdminWorkbenchDetail).mockResolvedValue({
+      requestId: "1",
+      history: [{
+        previousStatus: "pending",
+        newStatus: "under_review",
+        changedBy: "manager",
+        changedAt: "2026-10-29T12:00:00Z",
+        reason: "Revisión iniciada",
+      }],
+      deliveries: [],
+      evidence: [],
+    });
+
+    render(<AdminPanel />);
+
+    await screen.findByText(/IUB-2026-TEST/);
+    expect(fetchAdminWorkbenchDetail).not.toHaveBeenCalled();
+    expect(screen.queryByText("Historial de la solicitud")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Ver historial" }));
+
+    await waitFor(() => expect(fetchAdminWorkbenchDetail).toHaveBeenCalledWith("1"));
+    expect(await screen.findByText("Historial de la solicitud")).toBeInTheDocument();
+    expect(screen.getByText(/Revisión iniciada/)).toBeInTheDocument();
+  });
 
   it("programa con la fecha de hoy y sin campo de código de recepción", async () => {
     vi.mocked(getAdminSession).mockResolvedValue({ username: "admin" });

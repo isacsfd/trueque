@@ -3,6 +3,7 @@ import { assertActiveAdminActor } from "../lib/admin-identity.ts";
 import { queryAdmin } from "../lib/database.ts";
 import { decryptPersonalData, participantCryptoConfig } from "../lib/crypto.ts";
 import { ApiError, json, mapError, methodNotAllowed } from "../lib/http.ts";
+import { normalizedSqlText } from "../lib/sql-text.ts";
 
 interface WorkbenchRow {
   request_id: string;
@@ -142,7 +143,7 @@ const submissionSelect = (modern: boolean) => modern
     NULL::text AS submission_condition,
     NULL::text AS submission_observations,`;
 
-const submissionEvidence = (modern: boolean) => modern
+const submissionEvidence = (modern: boolean, summary: boolean) => modern && !summary
   ? `
     coalesce(
       (SELECT jsonb_agg(jsonb_build_object(
@@ -156,35 +157,9 @@ const submissionEvidence = (modern: boolean) => modern
     ) AS evidence,`
   : `'[]'::jsonb AS evidence,`;
 
-const submissionJoins = (modern: boolean) => modern
-  ? `
-  LEFT JOIN public.offered_book_submissions s ON s.request_id = r.id
-  LEFT JOIN public.offered_book_submission_workflow w ON w.submission_id = s.id`
-  : "";
-
-/**
- * The live staging database is on the 0001-0005 schema. Keep the workbench
- * compatible with both that schema and the newer photographic submission
- * schema. The history is read from state_history, available in both versions.
- */
-function workbenchQuery(modern: boolean): string {
-  return `
-  SELECT
-${requestSelect}
-${submissionSelect(modern)}
-${submissionEvidence(modern)}
-    e.id AS exchange_id,
-    e.status AS exchange_status,
-    e.cancellation_idempotency_key AS cancellation_key,
-    rec.id AS reception_id,
-    rec.status AS reception_status,
-    ev.id AS evaluation_id,
-    ev.outcome AS evaluation_outcome,
-    cat.id AS cataloging_id,
-    cat.status AS cataloging_status,
-    a.id AS admission_id,
-    a.status AS admission_status,
-    a.copy_id AS offered_copy_id,
+const historySelect = (include: boolean) => !include
+  ? `'[]'::jsonb AS history,`
+  : `
     coalesce(
       (SELECT jsonb_agg(jsonb_build_object(
          'previousStatus', h.previous_state,
@@ -197,7 +172,11 @@ ${submissionEvidence(modern)}
        LEFT JOIN public.app_users u ON u.id = h.changed_by
        WHERE h.entity_type = 'exchange_request' AND h.entity_id = r.id),
       '[]'::jsonb
-    ) AS history,
+    ) AS history,`;
+
+const deliveriesSelect = (summary: boolean) => summary
+  ? `'[]'::json AS deliveries`
+  : `
     coalesce(
       (SELECT json_agg(json_build_object(
          'id', d.id,
@@ -210,7 +189,106 @@ ${submissionEvidence(modern)}
        ) ORDER BY d.id)
        FROM public.deliveries d WHERE d.exchange_id = e.id),
       '[]'::json
-    ) AS deliveries
+    ) AS deliveries`;
+
+const submissionJoins = (modern: boolean) => modern
+  ? `
+  LEFT JOIN public.offered_book_submissions s ON s.request_id = r.id
+  LEFT JOIN public.offered_book_submission_workflow w ON w.submission_id = s.id`
+  : "";
+
+const WORKBENCH_STATUSES = new Set([
+  "pending", "under_review", "approved", "rejected", "scheduled", "in_process",
+  "cancellation_pending", "completed", "cancelled",
+]);
+
+interface WorkbenchSearch {
+  status: string | null;
+  q: string | null;
+  page: number;
+  pageSize: number;
+}
+
+function parseWorkbenchSearch(url: URL): WorkbenchSearch {
+  const status = url.searchParams.get("status");
+  if (status !== null && status !== "" && !WORKBENCH_STATUSES.has(status)) {
+    throw new ApiError(400, "invalid_query", "El estado del filtro no es válido.");
+  }
+  const q = url.searchParams.get("q")?.trim() ?? "";
+  if (q.length > 120) {
+    throw new ApiError(400, "invalid_query", "La búsqueda es demasiado larga.");
+  }
+  const rawPage = url.searchParams.get("page");
+  const rawPageSize = url.searchParams.get("pageSize");
+  const page = rawPage === null ? 1 : Number(rawPage);
+  const pageSize = rawPageSize === null ? 100 : Number(rawPageSize);
+  if (!Number.isSafeInteger(page) || page < 1 || page > 10_000) {
+    throw new ApiError(400, "invalid_query", "La página no es válida.");
+  }
+  if (!Number.isSafeInteger(pageSize) || pageSize < 1 || pageSize > 100) {
+    throw new ApiError(400, "invalid_query", "El tamaño de página no es válido.");
+  }
+  return { status: status || null, q: q ? normalizeWorkbenchText(q) : null, page, pageSize };
+}
+
+function normalizeWorkbenchText(value: string): string {
+  return value
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
+function workbenchFilter(): string {
+  return `WHERE ($1::text IS NULL OR r.status = $1)
+    AND ($2::text IS NULL
+      OR strpos(${normalizedSqlText("r.request_code")}, $2) > 0
+      OR strpos(${normalizedSqlText("ob.title")}, $2) > 0
+      OR strpos(${normalizedSqlText("ob.author")}, $2) > 0
+      OR strpos(${normalizedSqlText("b.title")}, $2) > 0
+      OR strpos(${normalizedSqlText("c.inventory_code")}, $2) > 0)`;
+}
+
+function workbenchCountQuery(): string {
+  return `
+    SELECT count(*)::int AS total
+    FROM public.exchange_requests r
+    LEFT JOIN public.copies c ON c.id = r.requested_copy_id
+    LEFT JOIN public.bibliographic_records b ON b.id = c.bibliographic_record_id
+    LEFT JOIN public.offered_books ob ON ob.request_id = r.id
+    ${workbenchFilter()}`;
+}
+
+/**
+ * The live staging database is on the 0001-0005 schema. Keep the workbench
+ * compatible with both that schema and the newer photographic submission
+ * schema. The history is read from state_history, available in both versions.
+ */
+function workbenchQuery(
+  modern: boolean,
+  summary = false,
+  includeHistory = true,
+): string {
+  return `
+  SELECT
+${requestSelect}
+${submissionSelect(modern)}
+${submissionEvidence(modern, summary)}
+    e.id AS exchange_id,
+    e.status AS exchange_status,
+    e.cancellation_idempotency_key AS cancellation_key,
+    rec.id AS reception_id,
+    rec.status AS reception_status,
+    ev.id AS evaluation_id,
+    ev.outcome AS evaluation_outcome,
+    cat.id AS cataloging_id,
+    cat.status AS cataloging_status,
+    a.id AS admission_id,
+    a.status AS admission_status,
+    a.copy_id AS offered_copy_id,
+    ${historySelect(includeHistory && !summary)}
+    ${deliveriesSelect(summary)}
   FROM public.exchange_requests r
   LEFT JOIN public.copies c ON c.id = r.requested_copy_id
   LEFT JOIN public.bibliographic_records b ON b.id = c.bibliographic_record_id
@@ -230,8 +308,9 @@ ${submissionJoins(modern)}
   LEFT JOIN public.book_evaluations ev ON ev.reception_id = rec.id AND ev.is_final
   LEFT JOIN public.cataloging_records cat ON cat.reception_id = rec.id
   LEFT JOIN public.inventory_admissions a ON a.reception_id = rec.id
+  ${workbenchFilter()}
   ORDER BY r.created_at DESC, r.id DESC
-  LIMIT 100`;
+  LIMIT $3 OFFSET $4`;
 }
 
 async function requireWorkbenchRead(actorUserId: number): Promise<void> {
@@ -361,7 +440,20 @@ export default async function handler(request: Request): Promise<Response> {
       "SELECT to_regclass('public.offered_book_submissions') IS NOT NULL AS has_submissions",
     );
     const modern = schema[0]?.has_submissions === true;
-    const rows = await queryAdmin<WorkbenchRow>(workbenchQuery(modern));
+    const url = new URL(request.url);
+    const search = parseWorkbenchSearch(url);
+    const summary = url.searchParams.get("summary") === "1";
+    const includeHistory = !summary && url.searchParams.get("history") !== "0";
+    const offset = (search.page - 1) * search.pageSize;
+    const totalRows = await queryAdmin<{ total: number }>(
+      workbenchCountQuery(),
+      [search.status, search.q],
+    );
+    const total = totalRows[0]?.total ?? 0;
+    const rows = await queryAdmin<WorkbenchRow>(
+      workbenchQuery(modern, summary, includeHistory),
+      [search.status, search.q, search.pageSize, offset],
+    );
     const participantIds = [...new Set(
       rows.map((row) => row.participant_id).filter((value): value is string => Boolean(value)),
     )];
@@ -461,10 +553,18 @@ export default async function handler(request: Request): Promise<Response> {
         };
       }),
       capabilities,
+      page: search.page,
+      pageSize: search.pageSize,
+      total,
+      hasMore: offset + rows.length < total,
+      summary,
+      historyIncluded: includeHistory,
     });
   } catch (error) {
     return mapError(error);
   }
 }
+
+export { workbenchCountQuery, workbenchQuery };
 
 export const config = { path: "/api/admin/workbench" };
