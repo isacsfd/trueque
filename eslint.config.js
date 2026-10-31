@@ -5,7 +5,7 @@ import globals from "globals";
 import tseslint from "typescript-eslint";
 
 export default tseslint.config(
-  { ignores: ["dist", "coverage", ".netlify"] },
+  { ignores: ["dist", "coverage", ".netlify", "release"] },
   {
     files: ["**/*.{js,mjs}"],
     extends: [js.configs.recommended],

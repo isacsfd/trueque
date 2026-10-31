@@ -109,3 +109,5 @@ El flujo administrativo de habilitación y su brecha actual están documentados 
   hashes, hojas y estado de no importación.
 
 Ninguno de esos documentos está aprobado ni habilita ejemplares por sí mismo.
+
+- `docs/inventario/reparacion-2026-10-31.md` — hotfix 0020, importador seguro, monitor de anomalías, backup, validación y rollback.
