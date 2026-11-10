@@ -5,6 +5,7 @@ import {
   fetchAdminWorkbenchDetail,
   fetchAdminWorkbenchPage,
   fetchEvidenceBlob,
+  fetchLoansPage,
   fetchInventoryRegistrationCapabilities,
   getAdminSession,
   runAdminAction,
@@ -24,6 +25,7 @@ vi.mock("../lib/api", () => ({
   issueLookupToken: vi.fn(),
   fetchInventoryBatches: vi.fn(),
   fetchInventoryRegistrationCapabilities: vi.fn(),
+  fetchLoansPage: vi.fn(),
   registerInstitutionalCopy: vi.fn(),
   inspectInventoryBatch: vi.fn(),
   prevalidateInventoryBatch: vi.fn(),
@@ -79,6 +81,10 @@ describe("panel administrativo", () => {
       canRegister: true,
       canVerify: true,
       canPublish: true,
+    });
+    vi.mocked(fetchLoansPage).mockResolvedValue({
+      items: [],
+      pagination: { page: 1, pageSize: 25, total: 0, hasMore: false },
     });
     vi.mocked(fetchAdminWorkbenchPage).mockImplementation(async () => {
       const items = (await vi.mocked(fetchAdminWorkbench)()) ?? [];
@@ -332,6 +338,40 @@ describe("panel administrativo", () => {
     });
     expect(screen.getByLabelText("Título")).toBeInTheDocument();
     expect(screen.getByLabelText("Código de inventario")).toBeInTheDocument();
+  });
+
+  it("abre el historial de préstamos sin datos personales", async () => {
+    vi.mocked(getAdminSession).mockResolvedValue({ username: "admin" });
+    vi.mocked(fetchAdminWorkbench).mockResolvedValue([]);
+    vi.mocked(fetchLoansPage).mockResolvedValue({
+      items: [{
+        loanId: "8",
+        requestId: "3",
+        requestCode: "IUB-2026-LOAN",
+        reservationId: "5",
+        exchangeId: null,
+        copyId: "12",
+        inventoryCode: "INV-001",
+        title: "Libro prestado",
+        author: "Autora",
+        status: "lent",
+        startedAt: "2026-11-01T10:00:00Z",
+        dueAt: "2026-11-03T10:00:00Z",
+        closedAt: null,
+        deliveries: { dropoffDeliveryId: "20", handoverDeliveryId: "21", returnDeliveryId: null },
+      }],
+      pagination: { page: 1, pageSize: 25, total: 1, hasMore: false },
+    });
+
+    render(<AdminPanel />);
+    await screen.findByRole("tab", { name: "Préstamos" });
+    fireEvent.click(screen.getByRole("tab", { name: "Préstamos" }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { name: "Préstamos" })).toBeInTheDocument();
+    });
+    expect(screen.getByText("IUB-2026-LOAN")).toBeInTheDocument();
+    expect(screen.queryByText(/participante/i)).not.toBeInTheDocument();
   });
 
   it("abre la gestión de cuentas y protege la sesión propia", async () => {

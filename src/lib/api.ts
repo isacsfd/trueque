@@ -523,6 +523,52 @@ export function fetchAdminWorkbenchDetail(requestId: string): Promise<AdminWorkb
   return request<AdminWorkbenchDetail>(`/api/admin/workbench/detail?requestId=${encodeURIComponent(requestId)}`);
 }
 
+export interface LoanSummary {
+  loanId: string;
+  requestId: string;
+  requestCode: string;
+  reservationId: string;
+  exchangeId: string | null;
+  copyId: string;
+  inventoryCode: string;
+  title: string;
+  author: string;
+  status: "reserved" | "committed" | "lent" | "return_pending" | "completed" | "cancelled" | "expired";
+  startedAt: string;
+  dueAt: string;
+  closedAt: string | null;
+  deliveries: {
+    dropoffDeliveryId: string | null;
+    handoverDeliveryId: string | null;
+    returnDeliveryId: string | null;
+  };
+}
+
+export interface LoanPage {
+  items: LoanSummary[];
+  pagination: {
+    page: number;
+    pageSize: number;
+    total: number;
+    hasMore: boolean;
+  };
+}
+
+export interface LoanQuery {
+  status?: string;
+  page?: number;
+  pageSize?: number;
+}
+
+export function fetchLoansPage(input: LoanQuery = {}): Promise<LoanPage> {
+  const params = new URLSearchParams();
+  if (input.status && input.status !== "all") params.set("status", input.status);
+  if (input.page && input.page > 0) params.set("page", String(input.page));
+  if (input.pageSize && input.pageSize > 0) params.set("pageSize", String(input.pageSize));
+  const suffix = params.size > 0 ? `?${params.toString()}` : "";
+  return request<LoanPage>(`/api/admin/loans${suffix}`);
+}
+
 export function runAdminAction(input: AdminActionBody & { action: AdminActionBody["action"] }): Promise<unknown> {
   return request<{ result: unknown }>("/api/admin/action", {
     method: "POST",
