@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { fetchLoansPage } from "../lib/api";
+import { fetchLoansPage, runAdminAction } from "../lib/api";
 import type { LoanPage, LoanSummary } from "../lib/api";
 
 const statuses = [
@@ -29,6 +29,35 @@ export function LoanHistory() {
   const [currentPage, setCurrentPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [busyLoanId, setBusyLoanId] = useState<string | null>(null);
+  const [result, setResult] = useState<string | null>(null);
+
+  async function reactivate(item: LoanSummary) {
+    const reason = window.prompt("Motivo obligatorio de reactivación:", "");
+    if (reason === null) return;
+    if (reason.trim().length < 3) {
+      setError("Indica un motivo de al menos 3 caracteres.");
+      return;
+    }
+
+    setBusyLoanId(item.loanId);
+    setError(null);
+    setResult(null);
+    try {
+      await runAdminAction({
+        action: "loan.reactivate",
+        loanId: item.loanId,
+        reason: reason.trim(),
+        idempotencyKey: crypto.randomUUID(),
+      });
+      setResult(`Préstamo ${item.requestCode} reactivado.`);
+      await load(status, currentPage);
+    } catch (reason2) {
+      setError(reason2 instanceof Error ? reason2.message : "No se pudo reactivar el préstamo.");
+    } finally {
+      setBusyLoanId(null);
+    }
+  }
 
   async function load(targetStatus = status, targetPage = currentPage) {
     setLoading(true);
@@ -74,6 +103,7 @@ export function LoanHistory() {
         Historial auditable de reservas, préstamos en curso y cierres. No muestra datos personales.
       </div>
       {error ? <div className="notice notice-error" role="alert">{error}</div> : null}
+      {result ? <div className="notice notice-success" role="status">{result}</div> : null}
 
       <div className="admin-filter">
         <label>Filtrar préstamos
@@ -101,6 +131,7 @@ export function LoanHistory() {
                 <th>Vence</th>
                 <th>Cierre</th>
                 <th>Entregas</th>
+                <th>Acciones</th>
               </tr>
             </thead>
             <tbody>
@@ -123,6 +154,18 @@ export function LoanHistory() {
                         .filter(Boolean)
                         .join(" · ") || "—"}
                     </span>
+                  </td>
+                  <td>
+                    {item.status === "cancelled" ? (
+                      <button
+                        className="button button-secondary"
+                        type="button"
+                        disabled={busyLoanId === item.loanId || loading}
+                        onClick={() => void reactivate(item)}
+                      >
+                        {busyLoanId === item.loanId ? "Reactivando…" : "Reactivar"}
+                      </button>
+                    ) : "—"}
                   </td>
                 </tr>
               ))}

@@ -174,6 +174,40 @@ describe("admin action API", () => {
     );
   });
 
+  it("delegates loan reactivation with reason and idempotency", async () => {
+    vi.mocked(requireAdmin).mockReturnValue({ username: "admin", actorUserId: 7, expiresAt: 9999999999 });
+    vi.mocked(queryAdmin).mockResolvedValue([{
+      loan_id: "8", status: "reserved", request_id: "3",
+      reservation_id: "5", copy_id: "12", due_at: "2026-11-03T10:00:00Z",
+    }]);
+
+    const response = await handler(createRequest({
+      action: "loan.reactivate",
+      loanId: 8,
+      reason: "Reactivación autorizada",
+      idempotencyKey: "11111111-1111-4111-8111-111111111112",
+    }));
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      result: {
+        loan_id: "8", status: "reserved", request_id: "3",
+        reservation_id: "5", copy_id: "12", due_at: "2026-11-03T10:00:00Z",
+      },
+    });
+    expect(queryAdmin).toHaveBeenCalledWith(
+      expect.stringContaining("reactivate_cancelled_loan"),
+      [8, "Reactivación autorizada", "11111111-1111-4111-8111-111111111112", 7],
+    );
+
+    vi.mocked(queryAdmin).mockClear();
+    const missingReason = await handler(createRequest({
+      action: "loan.reactivate", loanId: 8,
+      idempotencyKey: "11111111-1111-4111-8111-111111111113",
+    }));
+    expect(missingReason.status).toBe(400);
+    expect(queryAdmin).not.toHaveBeenCalled();
+  });
+
   it("rejects unknown actions and missing CSRF markers before touching the database", async () => {
     vi.mocked(requireAdmin).mockReturnValue({ username: "admin", actorUserId: 7, expiresAt: 9999999999 });
     const unknown = await handler(createRequest({ action: "sql.execute" }));

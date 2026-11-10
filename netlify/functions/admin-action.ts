@@ -36,6 +36,7 @@ const actions = [
   "exchange.start",
   "exchange.complete",
   "exchange.cancel",
+  "loan.reactivate",
 ] as const;
 
 const deliveryTypes = [
@@ -272,6 +273,16 @@ export default async function handler(request: Request): Promise<Response> {
         rows = await queryAdmin("SELECT public.cancel_exchange($1, $2, $3, $4)", [
           exchangeId, cancellationKey, actor, reason,
         ]);
+        break;
+      }
+      case "loan.reactivate": {
+        const loanId = numberField(body, "loanId");
+        const reason = stringField(body, "reason", { min: 3, max: 3000 });
+        const idempotencyKey = uuidField(body, "idempotencyKey");
+        rows = await queryAdmin(
+          "SELECT * FROM public.reactivate_cancelled_loan($1, $2, $3, $4)",
+          [loanId, reason, idempotencyKey, actor],
+        );
         break;
       }
       default:

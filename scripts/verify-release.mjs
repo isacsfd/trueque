@@ -20,6 +20,7 @@ const required = [
   ["Alta de ejemplar", "manual inventory registration"],
   ["Publicar ahora", "eligible publication control"],
   ["Préstamos", "loan history"],
+  ["Reactivar", "cancelled loan reactivation"],
 ];
 for (const [needle, label] of required) {
   if (!bundle.includes(needle)) throw new Error(`Release bundle is missing ${label}: ${needle}`);

@@ -23,6 +23,7 @@
 - `POST /api/admin/batches/confirm`, `POST /api/admin/batches/cancel`: confirmación/cancelación auditada. Con `0023`, las filas elegibles se publican automáticamente; sin ella se mantiene el comportamiento anterior.
 - `GET/POST /api/admin/inventory`: capacidades de alta manual y registro idempotente de un ejemplar institucional. El alta nace no disponible; publicar exige condición evaluada, referencia de verificación y permisos `inventory.verify`/`inventory.publish`.
 - `GET /api/admin/loans`: historial paginado de préstamos/trueques con estados y entregas; requiere `requests.read` o `requests.review` y no expone datos personales.
+- `POST /api/admin/action` con `loan.reactivate`: reactiva un préstamo cancelado con motivo e idempotencia; exige `loans.reactivate` y mantiene las reglas de inventario en PostgreSQL.
 - `GET /api/admin/stats?months=1..12`: agregados reales; requiere `stats.read`.
 - `GET /api/admin/accounts` y `POST /api/admin/accounts`: listado, alta de actores, activación/desactivación y asignación/retirada de roles; requiere `account.manage`. No acepta contraseñas ni hashes.
 - `GET /api/admin/account` y `POST /api/admin/account`: información de cuenta; el cambio de contraseña está delegado al despliegue/OIDC.

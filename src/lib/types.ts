@@ -202,7 +202,8 @@ export type AdminActionName =
   | "admission.enable"
   | "exchange.start"
   | "exchange.complete"
-  | "exchange.cancel";
+  | "exchange.cancel"
+  | "loan.reactivate";
 
 export interface AdminActionBody {
   action: AdminActionName;
@@ -235,6 +236,7 @@ export interface AdminActionBody {
   authorizationKey?: string;
   admissionId?: string;
   inventoryCode?: string;
+  loanId?: string;
   completionKey?: string;
   cancellationKey?: string;
   idempotencyKey: string;
