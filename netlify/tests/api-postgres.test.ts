@@ -190,7 +190,7 @@ describe.skipIf(!databaseUrl)("API + PostgreSQL full lifecycle", () => {
     authorizerId = await actor("authorizer", "authorizer", ["cataloging.authorize"]);
     await migrator.query(
       `INSERT INTO public.reservation_policy (policy_id, duration_seconds, updated_by)
-       VALUES (1, 3600, $1)
+       VALUES (1, 172800, $1)
        ON CONFLICT (policy_id) DO UPDATE SET duration_seconds = EXCLUDED.duration_seconds`,
       [Number(managerId)],
     );

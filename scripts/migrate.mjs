@@ -327,8 +327,9 @@ async function verifyRolePrivileges(connection, migrationRole, runtimeRoles) {
          AND has_function_privilege($1, p.oid, 'EXECUTE')`,
       [role],
     );
-    if (unexpectedRuntimeFunctions(role, functions.rows.map((row) => row.signature)).length > 0) {
-      throw new Error("A runtime role has EXECUTE on an unreviewed function.");
+    const unexpected = unexpectedRuntimeFunctions(role, functions.rows.map((row) => row.signature));
+    if (unexpected.length > 0) {
+      throw new Error(`A runtime role has EXECUTE on an unreviewed function: ${unexpected.join(", ")}`);
     }
   }
 
@@ -452,6 +453,26 @@ try {
     if (appliedRows.length === 0) {
       throw new Error("An empty migration ledger already exists; manual review required.");
     }
+
+    // Production accumulated reviewed manual hotfixes outside the runner. This
+    // is a known, non-runner-eligible profile: fail before any manifest or
+    // pending-prefix work rather than replaying historical migrations.
+    const highestAppliedVersion = appliedRows
+      .map((row) => row.version)
+      .sort()
+      .at(-1);
+    if (highestAppliedVersion <= "0005") {
+      const manualHotfix = await client.query(`
+        SELECT
+          to_regclass('public.inventory_repair_markers') IS NOT NULL
+          OR to_regclass('public.catalog_verification_exemptions') IS NOT NULL
+          AS has_manual_inventory_hotfix
+      `);
+      if (manualHotfix.rows[0]?.has_manual_inventory_hotfix) {
+        throw new Error("Known manual 0019/0020 baseline detected; use the reviewed reconciliation procedure; automatic migration is refused.");
+      }
+    }
+
     if (!(await manifestExists(client))) {
       throw new Error("Applied migrations have no schema-object manifest; manual review required.");
     }
@@ -507,7 +528,7 @@ try {
       ? ` (SQLSTATE ${error.code})`
       : "";
   const safeMessage =
-    error instanceof Error && /^(Database ledger|Schema object manifest|The schema object manifest|Untracked database objects|An empty migration ledger|The migration role|A runtime role|A migration\/runtime role|PUBLIC has|Applied migrations|No migration created|Unknown migration|Checksum mismatch|Duplicate migration|Migration and runtime|Connected migration|At least one runtime|Public and administrative|An object in schema public|A baseline version)/.test(error.message)
+    error instanceof Error && /^(Database ledger|Schema object manifest|The schema object manifest|Untracked database objects|An empty migration ledger|The migration role|A runtime role|A migration\/runtime role|PUBLIC has|Applied migrations|No migration created|Unknown migration|Checksum mismatch|Duplicate migration|Migration and runtime|Connected migration|At least one runtime|Public and administrative|An object in schema public|A baseline version|Known manual)/.test(error.message)
       ? ` ${error.message}`
       : " Database operation failed; connection details were suppressed.";
   console.error(`Migration transaction rolled back.${safeMessage}${code}`);

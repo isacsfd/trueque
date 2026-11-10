@@ -68,6 +68,28 @@ describe("migration preflight validation", () => {
     expect(() => pendingMigrations(local, [{ version: "0009_unknown", checksum: "x" }])).toThrow(/unknown migration/);
     expect(() => pendingMigrations(local, [{ version: "0001_core", checksum: "bad" }])).toThrow(/Checksum mismatch/);
     expect(() => pendingMigrations(local, [{ version: "0002_guards", checksum: "b" }])).toThrow(/contiguous prefix/);
+    expect(() => pendingMigrations(local, [
+      { version: "0001_core", checksum: "a" },
+      { version: "0002_guards", checksum: "b" },
+      { version: "0002_guards", checksum: "b" },
+    ])).toThrow(/duplicate migration version/);
+  });
+
+  it("plans the documented staging prefix without gaps or rewrites", () => {
+    const local = [
+      { version: "0001_initial_schema", checksum: "a" },
+      { version: "0005_participant_api", checksum: "e" },
+      { version: "0010_inventory_batches", checksum: "j" },
+      { version: "0023_inventory_batch_autopublish", checksum: "w" },
+      { version: "0026_migration_chain_compat", checksum: "z" },
+    ];
+    const staging = local.slice(0, 2);
+    const pending = pendingMigrations(local, staging);
+    expect(pending.map(({ version }) => version)).toEqual([
+      "0010_inventory_batches",
+      "0023_inventory_batch_autopublish",
+      "0026_migration_chain_compat",
+    ]);
   });
 
   it("detects unexpected and missing PostgreSQL objects", () => {
@@ -275,6 +297,14 @@ describe("role membership and function allowlists", () => {
       "admin_set_account_active(bigint,bigint,boolean)",
       "admin_assign_role(bigint,bigint,bigint)",
       "admin_remove_role(bigint,bigint,bigint)",
+      "register_institutional_copy(text,text,text,text,text,text,text,text,text,text,boolean,bigint,uuid)",
+      "confirm_inventory_batch_with_publication(bigint,bigint,uuid)",
+      "reactivate_cancelled_loan(bigint,text,uuid,bigint)",
+    ])).toEqual([]);
+    expect(unexpectedRuntimeFunctions("iub_public_runtime", [
+      "release_expired_reservations()",
+      "consume_public_status_rate_limit(bytea,integer,integer)",
+      "get_public_request_status_by_token(bytea)",
     ])).toEqual([]);
   });
 });

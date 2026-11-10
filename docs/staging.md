@@ -7,6 +7,14 @@
 > `docs/inventario/plan-despliegue-contencion.md` y
 > `docs/inventario/evaluacion-fotografica.md`.
 
+> **Cadena canónica (2026-11-10):** la secuencia completa válida ahora es
+> `0001`–`0026`. `0026_migration_chain_compat.sql` resuelve el conflicto de
+> aprobación entre `0011` y `0016`, completa los allowlists del runner y retira
+> el DML directo a `admin_credentials`. Staging con ledger `0001`–`0005` puede
+> aplicar el bloque `0006`–`0026` tras backup y preflight. Producción no es
+> elegible para el runner por su historial manual; ver la sección de migración
+> más abajo.
+
 ## Estado real
 
 Staging desplegado y probado:
@@ -35,7 +43,8 @@ La visibilidad del proyecto se cambió a pública para permitir smoke tests sin 
 - Asignar `inventory.batches.import`, `inventory.batches.confirm`, `inventory.batches.read`, `stats.read` y `account.manage` con separación de funciones; no concederlos al rol público.
 - Las credenciales de acceso están en un archivo local fuera del repositorio: `%USERPROFILE%\trueque-staging-admin.txt`.
 - Aviso de privacidad sintético: `staging-2026-10`. No usar en producción.
-- Política de reservas configurada en 3600 segundos.
+- Política de reservas configurada en 3600 segundos. La cadena canónica nueva
+  exige 172800 segundos; `0024` ajustará este valor al aplicar.
 - Las contraseñas, claves y tokens están solo en variables privadas de Netlify y archivos temporales fuera del repositorio.
 
 ## Puerta local
@@ -89,11 +98,68 @@ Configuradas en el proyecto `trueque-staging-2026`:
 3. Configurar las URLs privadas y el driver `neon`.
 4. Insertar el aviso de privacidad aprobado.
 5. Crear los actores administrativos y sus permisos; generar hashes con `npm run admin:hash-password`.
-6. Configurar `reservation_policy` con `set_reservation_policy` (la ausencia bloquea `reserve_copy` con `55000`).
+6. Configurar `reservation_policy` con `set_reservation_policy` usando al menos `172800` (la ausencia bloquea `reserve_copy` con `55000`).
 7. Ejecutar `npm run staging:check`.
 8. Ejecutar `npm run db:migrate:apply` y repetirlo.
 9. Configurar variables de Netlify y desplegar.
 10. Ejecutar los smoke tests de esta página.
+
+## Cadena canónica, precondiciones y rollback
+
+### Perfiles reconocidos
+
+| Perfil | Ledger efectivo | Ruta permitida |
+|---|---|---|
+| Base nueva | vacío | bootstrap completo `0001`–`0026` con el runner |
+| Staging histórico | `0001`–`0005` y manifiesto consistente | aplicar bloque `0006`–`0026` |
+| Producción histórica | `0001`–`0005` en ledger; `0019`/`0020` manuales fuera del ledger | **no usar el runner**; requiere reconciliación autorizada aparte |
+
+El runner rechaza con error claro si detecta el marcador o las tablas de la
+reparación manual de inventario con un ledger menor o igual a `0005`. No intenta
+aplicar `0006`+ ni tocar datos.
+
+### Precondiciones para staging
+
+1. Snapshot/rama Neon verificable posterior al estado actual.
+2. Backup confirmado y responsable/ventana registrados fuera del repositorio.
+3. Ledger exacto `0001`–`0005`, sin duplicados ni huecos.
+4. Manifiesto consistente y propiedad de objetos en `iub_schema_migrator`.
+5. Roles runtime/migrador separados y sin DML directo.
+6. `npm test`, `lint`, `build`, `build:release` en verde.
+7. Aprobación escrita de migración.
+
+### Orden exacto
+
+1. `npm run db:migrate:plan` y revisar hashes `0006`–`0026`.
+2. `npm run db:migrate:apply` (transacción única).
+3. Repetir `npm run db:migrate:apply`; debe responder idempotente.
+4. Validar ledger, manifiesto, política de reserva y catálogo.
+5. Ejecutar smoke tests de solicitudes, préstamos, administración y estado.
+
+### Validación posterior mínima
+
+```sql
+BEGIN TRANSACTION READ ONLY;
+SELECT version, checksum FROM public.schema_migrations ORDER BY version;
+SELECT count(*) AS manifest_rows FROM public.schema_object_manifest;
+SELECT duration_seconds FROM public.reservation_policy WHERE policy_id = 1;
+SELECT count(*) AS catalog_count FROM public.available_catalog;
+SELECT status, count(*) FROM public.loans GROUP BY status ORDER BY status;
+SELECT count(*) AS real_anomalies FROM public.real_inventory_anomalies;
+ROLLBACK;
+```
+
+Criterios: ledger `0001`–`0026`, política `172800` o mayor, catálogo sin
+ejemplares reservados, préstamos cerrados preservados y anomalías reales en cero.
+
+### Rollback
+
+- Si el runner falla antes de `COMMIT`, la transacción revierte completa; no hay
+  cambios parciales ni filas nuevas en ledger.
+- Después de `COMMIT`, el rollback seguro es restaurar el snapshot/rama Neon
+  verificado. No borrar filas del ledger ni del manifiesto.
+- No ejecutar rollbacks manuales de `0020` sobre staging ya migrada a la cadena
+  canónica sin revisión separada.
 
 ## Bloqueos y pendientes
 

@@ -118,7 +118,7 @@ async function seedBase() {
     authorizer: await createActor("authorizer", ["cataloging.authorize"]),
   };
 
-  await admin.query("SELECT public.set_reservation_policy(3600, $1)", [actor.manager.id]);
+  await admin.query("SELECT public.set_reservation_policy(172800, $1)", [actor.manager.id]);
 
   return { actor, publisherId, genreId };
 }
@@ -421,15 +421,17 @@ async function tests(base) {
     const copy = await createInstitutionalCopy(base, `double-${next()}`);
     const first = await createRequest(copy.copyId, `double-a-${next()}`);
     const second = await createRequest(copy.copyId, `double-b-${next()}`);
-    await approve(first.requestId, base.actor);
-    await approve(second.requestId, base.actor);
     const results = await Promise.allSettled([
       publicRuntime.query("SELECT * FROM public.reserve_copy($1, $2, $3, $4)", [copy.copyId, first.requestId, first.accessHash, uuid()]),
       publicTwo.query("SELECT * FROM public.reserve_copy($1, $2, $3, $4)", [copy.copyId, second.requestId, second.accessHash, uuid()]),
     ]);
     assert.equal(results.filter((result) => result.status === "fulfilled").length, 1);
+    const winner = results[0].status === "fulfilled" ? first : second;
+    await approve(winner.requestId, base.actor);
     const active = await migrator.query(
-      "SELECT count(*)::int AS count FROM public.reservations WHERE copy_id = $1 AND status = 'active'",
+      `SELECT count(*)::int AS count
+       FROM public.reservations
+       WHERE copy_id = $1 AND status IN ('active', 'converted')`,
       [copy.copyId],
     );
     assert.equal(active.rows[0].count, 1);
@@ -441,11 +443,15 @@ async function tests(base) {
     const copy = await createInstitutionalCopy(base, `expire-${next()}`);
     const first = await createRequest(copy.copyId, `expire-a-${next()}`);
     const second = await createRequest(copy.copyId, `expire-b-${next()}`);
-    await approve(first.requestId, base.actor);
-    await approve(second.requestId, base.actor);
-    await admin.query("SELECT public.set_reservation_policy(1, $1)", [base.actor.manager.id]);
+    await admin.query("SELECT public.set_reservation_policy(172800, $1)", [base.actor.manager.id]);
     await publicRuntime.query("SELECT * FROM public.reserve_copy($1, $2, $3, $4)", [copy.copyId, first.requestId, first.accessHash, uuid()]);
-    await new Promise((resolve) => setTimeout(resolve, 1200));
+    await migrator.query(
+      `UPDATE public.reservations
+       SET created_at = clock_timestamp() - interval '48 hours',
+           expires_at = clock_timestamp() - interval '1 second'
+       WHERE copy_id = $1 AND request_id = $2 AND status = 'active'`,
+      [copy.copyId, first.requestId],
+    );
     const results = await Promise.allSettled([
       admin.query("SELECT public.expire_reservations($1, 100)", [base.actor.manager.id]),
       publicTwo.query("SELECT * FROM public.reserve_copy($1, $2, $3, $4)", [copy.copyId, second.requestId, second.accessHash, uuid()]),
@@ -468,7 +474,7 @@ async function tests(base) {
     );
     assert.equal(final.rows[0].active, 1);
     assert.equal(final.rows[0].availability, "reserved");
-    await admin.query("SELECT public.set_reservation_policy(3600, $1)", [base.actor.manager.id]);
+    await admin.query("SELECT public.set_reservation_policy(172800, $1)", [base.actor.manager.id]);
     console.log("ok - expiry and reservation keep one active hold");
   }
 
@@ -512,13 +518,17 @@ async function tests(base) {
     const flow = await createReservedScenario(base, `complete-${next()}`);
     await receiveBook(base, flow);
     const offer = await acceptAndAdmit(base, flow);
-    const watcher = await createRequest(offer.offeredCopyId, `watcher-${next()}`);
-    await expectPostgresError(approve(watcher.requestId, base.actor), "23514");
     await expectPostgresError(
-      publicRuntime.query("SELECT * FROM public.reserve_copy($1, $2, $3, $4)",
-        [offer.offeredCopyId, watcher.requestId, watcher.accessHash, uuid()]),
+      createRequest(offer.offeredCopyId, `watcher-${next()}`),
       "23514",
     );
+    const preCompletion = await migrator.query(
+      `SELECT c.availability,
+              (SELECT count(*)::int FROM public.available_catalog ac WHERE ac.copy_id = c.id) AS catalog_count
+       FROM public.copies c WHERE c.id = $1`,
+      [offer.offeredCopyId],
+    );
+    assert.deepEqual(preCompletion.rows[0], { availability: "unavailable", catalog_count: 0 });
 
     await startAndHandover(base, flow);
     const completionKey = uuid();
@@ -548,6 +558,7 @@ async function tests(base) {
       migrator.query("UPDATE public.copies SET availability = 'available' WHERE id = $1", [offer.offeredCopyId]),
       "42501",
     );
+    const watcher = await createRequest(offer.offeredCopyId, `watcher-after-completion-${next()}`);
     const watcherReservation = await publicRuntime.query(
       "SELECT * FROM public.reserve_copy($1, $2, $3, $4)",
       [offer.offeredCopyId, watcher.requestId, watcher.accessHash, uuid()],
@@ -623,8 +634,6 @@ async function tests(base) {
     const copy = await createInstitutionalCopy(base, `blocking-${next()}`);
     const first = await createRequest(copy.copyId, `blocking-a-${next()}`);
     const second = await createRequest(copy.copyId, `blocking-b-${next()}`);
-    await approve(first.requestId, base.actor);
-    await approve(second.requestId, base.actor);
 
     await blocker.query("BEGIN");
     try {
@@ -638,14 +647,16 @@ async function tests(base) {
       );
       assert.ok(locks.rows[0].waiting > 0, "the second session must wait on a PostgreSQL lock");
       await blocker.query("COMMIT");
-      await expectPostgresError(waiting, "23514");
+      await expectPostgresError(waiting, "P0005");
     } catch (error) {
       await blocker.query("ROLLBACK").catch(() => undefined);
       throw error;
     }
 
+    await approve(first.requestId, base.actor);
     const active = await migrator.query(
-      "SELECT count(*)::int AS count FROM public.reservations WHERE copy_id = $1 AND status = 'active'",
+      `SELECT count(*)::int AS count FROM public.reservations
+       WHERE copy_id = $1 AND status IN ('active', 'converted')`,
       [copy.copyId],
     );
     assert.equal(active.rows[0].count, 1);
@@ -809,7 +820,7 @@ async function tests(base) {
        FROM public.offered_book_submissions s WHERE s.id = $1`,
       [submissionId],
     );
-    assert.deepEqual(state.rows[0], { status: "in_review", reviews: 1, availability: "available" });
+    assert.deepEqual(state.rows[0], { status: "in_review", reviews: 1, availability: "reserved" });
     console.log("ok - photographic review serializes reviewers without touching inventory");
   }
 
@@ -852,7 +863,13 @@ async function tests(base) {
     assert.equal(outcomes.filter((outcome) => outcome.status === "fulfilled").length, 1);
     const rejected = outcomes.find((outcome) => outcome.status === "rejected");
     assert.ok(rejected && rejected.status === "rejected");
-    assert.equal(rejected.reason.code, "23514");
+    assert.equal(rejected.reason.code, "P0005");
+
+    const winner = outcomes[0].status === "fulfilled" ? requestOne : requestTwo;
+    const reservation = await publicRuntime.query("SELECT * FROM public.reserve_copy($1, $2, $3, $4)", [
+      verifiedId, winner.requestId, winner.accessHash, uuid(),
+    ]);
+    assert.ok(reservation.rows[0].reservation_id);
 
     const state = await migrator.query(
       `SELECT c.availability,

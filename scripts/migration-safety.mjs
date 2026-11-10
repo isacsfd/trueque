@@ -244,6 +244,10 @@ const PUBLIC_RUNTIME_FUNCTIONS = new Set([
   "resubmit_offered_book_submission(bigint,bytea,uuid)",
   "get_offered_book_submission(bigint,bytea)",
   "get_offered_book_evidence(bigint,bytea)",
+  "release_expired_reservations()",
+  "get_public_request_status(text)",
+  "consume_public_status_rate_limit(bytea,integer,integer)",
+  "get_public_request_status_by_token(bytea)",
 ]);
 
 const ADMIN_RUNTIME_FUNCTIONS = new Set([
@@ -277,6 +281,30 @@ const ADMIN_RUNTIME_FUNCTIONS = new Set([
   "admin_set_account_active(bigint,bigint,boolean)",
   "admin_assign_role(bigint,bigint,bigint)",
   "admin_remove_role(bigint,bigint,bigint)",
+  "admin_has_account_manage(bigint)",
+  "admin_create_user(bigint,text,text,text,text)",
+  "admin_set_user_active(bigint,bigint,boolean)",
+  "admin_assign_user_role(bigint,bigint,text)",
+  "admin_remove_user_role(bigint,bigint,text)",
+  "admin_reset_user_password(bigint,bigint,text)",
+  "admin_change_own_password(bigint,text)",
+  "admin_change_own_password_named(bigint,text,text)",
+  "admin_reset_user_password_named(bigint,bigint,text,text)",
+  "copy_has_competing_hold(bigint,bigint)",
+  "release_reservation_hold(bigint,bigint,text)",
+  "process_expired_reservation(bigint,bigint)",
+  "plan_exchange_with_dropoff(bigint,timestamp with time zone,uuid,bigint)",
+  "issue_request_lookup_token(bigint,bytea,bigint,text)",
+  "revoke_request_lookup_token(bigint,bigint)",
+  "copy_is_synthetic(bigint)",
+  "verify_institutional_copy(bigint,bigint,text)",
+  "publish_institutional_copy(bigint,bigint,uuid)",
+  "withdraw_copy(bigint,text,text,bigint,uuid)",
+  "classify_synthetic_inventory(bigint)",
+  "import_event_inventory(text,jsonb,bigint,uuid)",
+  "register_institutional_copy(text,text,text,text,text,text,text,text,text,text,boolean,bigint,uuid)",
+  "confirm_inventory_batch_with_publication(bigint,bigint,uuid)",
+  "reactivate_cancelled_loan(bigint,text,uuid,bigint)",
 ]);
 
 export function normalizeFunctionSignature(signature) {
