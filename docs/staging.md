@@ -1,5 +1,53 @@
 # Staging — Trueque
 
+> **Reconstrucción de staging (2026-11-11):** la rama `production` del proyecto
+> Neon `trueque-staging-2026` tenía ~90 objetos aplicados manualmente fuera del
+> ledger (contenido de `0006`–`0023` sin registro); el runner la rechazó por
+> diseño y la transacción se revirtió sin cambios. La ruta elegida fue un
+> bootstrap completo en una base nueva `trueque_staging_v2` (mismo proyecto/rama
+> Neon), con roles existentes y siembra mínima. Punto de restauración previo:
+> rama Neon `staging-restore-2026-11-11` (`br-holy-pond-b60wncnx`, creada desde
+> `production` antes de cualquier cambio, auto-delete `Never`).
+>
+> Estado validado de `trueque_staging_v2`:
+>
+> - Ledger exacto `0001`–`0026` con checksums canónicos; segunda ejecución del
+>   runner idempotente.
+> - Manifiesto: 463 objetos.
+> - `reservation_policy` configurada con `set_reservation_policy(172800, …)`.
+> - Catálogo sembrado con ejemplares sintéticos (`preexisting`).
+> - Anomalías reales en cero.
+>
+> Smoke tests reales contra el deploy borrador de Netlify
+> (`https://6af47dbf07188b85af9fa683--trueque-staging-2026.netlify.app`,
+> candidata `release-candidate/` con functions y variables de staging):
+>
+> 1. Catálogo público (`/api/catalog`): 200.
+> 2. Alta de solicitud heredada (`ALLOW_LEGACY_REQUEST_INTAKE=true`, habilitada
+>    con aprobación explícita): 201.
+> 3. Reserva con token: 201, vigencia exacta de 48 h.
+> 4. Estado público con token: 200.
+> 5. Revisión, aprobación (con motivo obligatorio), planificación, entrega
+>    física del ofrecido, custodia, evaluación, catalogación, autorización de
+>    catalogación con el segundo actor, admisión, habilitación, inicio,
+>    handover y cierre: 200 en cada paso; préstamo registrado y cerrado.
+> 6. Cancelación de intercambio (sin entrega confirmada): 200; préstamo
+>    `cancelled`.
+> 7. Reactivación del préstamo cancelado: 200; préstamo `committed` con
+>    vigencia recalculada.
+> 8. Login administrativo correcto: 200; contraseña incorrecta: 401; acción
+>    administrativa sin sesión: 403; diagnósticos sin token: rechazado.
+>
+> Nota de siembra: la propagación de `loans.reactivate` en `0025` solo afecta a
+> roles existentes al aplicar la migración; los roles sembrados después deben
+> recibir el permiso explícitamente.
+>
+> Pendiente: publicar la candidata en el URL público
+> `trueque-staging-2026.netlify.app` (el equipo `soluciones s.a.s` tiene los
+> deploys de producción pausados por agotamiento de créditos; el deploy
+> borrador ya sirve la candidata con las mismas funciones y variables).
+
+
 > **Actualización P0/fotografías (2026-10-29):** staging sigue en `0001`–`0005`.
 > Las migraciones `0006`-`0011` están pendientes y no se aplicaron. `0009` es la
 > evaluación fotográfica y no forma parte de la contención; no ejecutar
