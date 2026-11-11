@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import {
   canonicalizeSql,
   dedupeObjects,
+  highestAppliedLedgerVersion,
   parseDatabaseTarget,
   parseDatabaseRole,
   pendingMigrations,
@@ -457,11 +458,10 @@ try {
     // Production accumulated reviewed manual hotfixes outside the runner. This
     // is a known, non-runner-eligible profile: fail before any manifest or
     // pending-prefix work rather than replaying historical migrations.
-    const highestAppliedVersion = appliedRows
-      .map((row) => row.version)
-      .sort()
-      .at(-1);
-    if (highestAppliedVersion <= "0005") {
+    const highestAppliedVersion = highestAppliedLedgerVersion(
+      appliedRows.map((row) => row.version),
+    );
+    if (highestAppliedVersion !== null && highestAppliedVersion <= "0005") {
       const manualHotfix = await client.query(`
         SELECT
           to_regclass('public.inventory_repair_markers') IS NOT NULL

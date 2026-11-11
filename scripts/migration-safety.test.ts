@@ -6,6 +6,7 @@ import {
   canonicalizeSql,
   compareObjectManifest,
   dedupeObjects,
+  highestAppliedLedgerVersion,
   parseDatabaseTarget,
   parseDatabaseRole,
   pendingMigrations,
@@ -18,6 +19,21 @@ import {
 } from "./migration-safety.mjs";
 
 describe("migration preflight validation", () => {
+  it("compares the applied ledger by four-digit version prefix", () => {
+    expect(
+      highestAppliedLedgerVersion([
+        "0001_initial_schema",
+        "0005_participant_api",
+        "0002_corrective_schema",
+      ]),
+    ).toBe("0005");
+    expect(
+      highestAppliedLedgerVersion(["0026_migration_chain_compat", "0009_offered_book_photos"]),
+    ).toBe("0026");
+    expect(highestAppliedLedgerVersion([])).toBe(null);
+    expect(highestAppliedLedgerVersion(["not_a_version"])).toBe(null);
+  });
+
   it("extracts only the URL role without exposing connection components", () => {
     expect(
       parseDatabaseRole("postgresql://iub_schema_migrator@db.example.test/library"),

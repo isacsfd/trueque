@@ -124,6 +124,20 @@ export function pendingMigrations(localMigrations, appliedRows) {
   return pending;
 }
 
+/**
+ * Highest applied ledger version as a comparable four-digit prefix. Ledger
+ * versions carry a name suffix (for example "0005_participant_api"), so the
+ * raw string must never be compared against a bare version like "0005".
+ */
+export function highestAppliedLedgerVersion(appliedVersions) {
+  const prefixes = appliedVersions
+    .filter((version) => /^\d{4}_/.test(version))
+    .map((version) => version.slice(0, 4));
+  if (prefixes.length === 0) return null;
+  prefixes.sort();
+  return prefixes.at(-1);
+}
+
 export function compareObjectManifest(actualObjects, expectedObjects) {
   const key = ({ object_type, object_name }) => `${object_type}\u0000${object_name}`;
   const actual = new Set(actualObjects.map(key));
